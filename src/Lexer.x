@@ -2,6 +2,7 @@
 module Lexer where
 }
 
+-- TODO: use monad wrapper
 %wrapper "basic"
 
 $digit = 0-9

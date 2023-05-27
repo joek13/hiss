@@ -63,3 +63,6 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - hiss
+    - hspec
+    build-tools:
+    - hspec-discover
