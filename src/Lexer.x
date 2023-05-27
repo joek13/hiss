@@ -16,7 +16,7 @@ tokens :-
     \-                             { \_ -> Minus }
     \*                             { \_ -> Star }
     \/                             { \_ -> Slash }
-    =                              { \_ -> Eq }
+    =                              { \_ -> Equals }
     $digit+                        { \s -> Int (read s) }
     \"[^\"]+\"                     { \s -> Str s }
     $alpha [$alpha $digit \_ \']*  { \s -> Id s }
@@ -29,7 +29,7 @@ data Token
     | Slash
     | LParen
     | RParen
-    | Eq
+    | Equals
     | Int Int
     | Id String
     | Str String
