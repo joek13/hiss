@@ -1,5 +1,5 @@
 {
-module Lexer (lexString, Lexeme) where
+module Lexer (lexString, Lexeme, Token(..), tok, val, position) where
 import Control.Monad (when)
 }
 
@@ -59,7 +59,7 @@ alexInitUserState = AlexUserState { commentDepth = 0, stringBuf = "" }
 alexEOF = do
     d <- getCommentDepth
     when (d /= 0) $ 
-        alexError "Unclosed block comment"
+        alexError "Unexpected EOF (open block comment)"
     pure $ Lexeme { position = Nothing, tok = EOF, val = "" }
 
 -- get/set comment depth
