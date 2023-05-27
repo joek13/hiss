@@ -1,8 +1,9 @@
 {
 module Lexer (lexString, Lexeme) where
+import Control.Monad (when)
 }
 
-%wrapper "monad"
+%wrapper "monadUserState"
 
 $digit = 0-9
 $alpha = [a-zA-Z]
@@ -14,7 +15,12 @@ tokens :-
 
 -- line comments
 <0>     "//".*                     ;
--- TODO: block comments
+-- block comments
+<0>     "/*"                       { nestComment `andBegin` comment }
+<0>     "*/"                       { \_ _ -> alexError "Unexpected closing block comment" }
+<comment> "/*"                     { nestComment }
+<comment> "*/"                     { unnestComment }
+<comment> (.|\n)                   ;
 
 <0>     \(                         { mkLexeme LParen }
 <0>     \)                         { mkLexeme RParen }
@@ -51,8 +57,46 @@ data AlexUserState = AlexUserState
 alexInitUserState = AlexUserState { commentDepth = 0, stringBuf = "" }
 
 alexEOF = do
+    d <- getCommentDepth
+    when (d /= 0) $ 
+        alexError "Unclosed block comment"
     pure $ Lexeme { position = Nothing, tok = EOF, val = "" }
 
+-- get/set comment depth
+getCommentDepth :: Alex Int
+getCommentDepth = commentDepth <$> alexGetUserState
+
+setCommentDepth :: Int -> Alex ()
+setCommentDepth d = do
+    ust <- alexGetUserState
+    alexSetUserState ust { commentDepth = d }
+
+incCommentDepth :: Alex ()
+incCommentDepth = do
+    d <- getCommentDepth
+    setCommentDepth $ d + 1
+
+decCommentDepth :: Alex ()
+decCommentDepth = do
+    d <- getCommentDepth
+    setCommentDepth $ d - 1
+
+-- increase comment depth
+nestComment :: AlexAction Lexeme
+nestComment inp len = do
+    incCommentDepth
+    skip inp len
+
+-- decrease comment depth
+unnestComment :: AlexAction Lexeme
+unnestComment inp len = do
+    decCommentDepth
+    d <- getCommentDepth
+    when (d == 0) $
+        alexSetStartCode 0
+    skip inp len
+
+-- lexes a string
 lexString :: String -> Either String [Lexeme]
 lexString input = runAlex input go
     where
