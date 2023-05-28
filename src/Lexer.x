@@ -11,25 +11,50 @@ $alpha = [a-zA-Z]
 
 tokens :-
 -- ignore whitespace
-<0>     $white+                    ;
+<0>       $white+                    ;
 
 -- line comments
-<0>     "//".*                     ;
+<0>       "//".*                     ;
 -- block comments
-<0>     "/*"                       { nestComment `andBegin` comment }
-<0>     "*/"                       { \_ _ -> alexError "Unexpected closing block comment" }
-<comment> "/*"                     { nestComment }
-<comment> "*/"                     { unnestComment }
-<comment> (.|\n)                   ;
+<0>       "/*"                       { nestComment `andBegin` comment }
+<0>       "*/"                       { \_ _ -> alexError "Unexpected closing block comment" }
+<comment> "/*"                       { nestComment }
+<comment> "*/"                       { unnestComment }
+<comment> (.|\n)                     ; -- ignore everything else inside a comment
 
-<0>     \(                         { mkLexeme LParen }
-<0>     \)                         { mkLexeme RParen }
+-- tokens
+<0>       \(                         { mkLexeme LParen }
+<0>       \)                         { mkLexeme RParen }
+<0>       "+"                        { mkLexeme Plus }
+<0>       "-"                        { mkLexeme Minus }
+<0>       "*"                        { mkLexeme Star }
+<0>       "/"                        { mkLexeme Slash }
+<0>       "="                        { mkLexeme Equals }
+<0>       "let"                      { mkLexeme Let }
+<0>       "in"                       { mkLexeme In }
+<0>       "if"                       { mkLexeme If }
+<0>       "then"                     { mkLexeme Then }
+<0>       "else"                     { mkLexeme Else }
+<0>       $digit+                    { mkLexeme Int }
+<0>       @id                        { mkLexeme Ident}
 
 {
 -- Token types.
 data Token = EOF
            | LParen
            | RParen
+           | Plus
+           | Minus
+           | Star
+           | Slash
+           | Equals
+           | Let
+           | In
+           | If
+           | Then
+           | Else
+           | Int
+           | Ident
     deriving (Eq, Show)
 
 -- Smallest lexical unit.

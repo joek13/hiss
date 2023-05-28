@@ -1,6 +1,6 @@
 module LexerSpec (spec) where
 
-import Lexer (Lexeme, Token (EOF), lexString, tok, val)
+import Lexer (Lexeme, Token (..), lexString, tok, val)
 import Test.Hspec (Spec, describe, it, shouldBe)
 
 rightToMaybe :: Either a b -> Maybe b
@@ -27,3 +27,23 @@ spec = do
 
     it "successfully lexes nested block comments" $
       discardPosns (lexString "/* this comment is /* nested */ and that's okay */") `shouldBe` Just [(EOF, "")]
+
+    it "lexes a simple program" $
+      discardPosns (lexString "let f cond = if cond then 42 else -42 in f 0")
+        `shouldBe` Just
+          [ (Let, "let"),
+            (Ident, "f"),
+            (Ident, "cond"),
+            (Equals, "="),
+            (If, "if"),
+            (Ident, "cond"),
+            (Then, "then"),
+            (Int, "42"),
+            (Else, "else"),
+            (Minus, "-"),
+            (Int, "42"),
+            (In, "in"),
+            (Ident, "f"),
+            (Int, "0"),
+            (EOF, "")
+          ]
