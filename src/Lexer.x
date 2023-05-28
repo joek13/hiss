@@ -1,5 +1,5 @@
 {
-module Lexer (lexString, Lexeme, Token(..), tok, val, position) where
+module Lexer (Lexeme(..), Token(..), Alex, AlexPosn(..), Range(..), alexMonadScan, lexString, alexGetInput, alexError, mergeRange) where
 import Control.Monad (when)
 }
 
@@ -57,20 +57,37 @@ data Token = EOF
            | Ident
     deriving (Eq, Show)
 
+-- Range of positions. (Range start stop) <-> [start, stop)
+data Range = Range AlexPosn AlexPosn
+    deriving (Eq, Show)
+
 -- Smallest lexical unit.
 data Lexeme = Lexeme
-    { position :: Maybe AlexPosn -- position of token in source program, or Nothing if EOF
-    , tok      :: Token          -- token type
-    , val      :: String         -- string value of token
+    { lexemeRange    :: Maybe Range    -- range of token in source program, or Nothing if EOF
+    , tok            :: Token          -- token type
+    , val            :: String         -- string value of token
     }
     deriving (Eq, Show)
 
+mkRange :: AlexInput -> Int -> Range
+mkRange (start, _, _, str) len = Range start stop
+    where stop = foldl alexMove start $ take len str
+
+-- Merges two ranges. a `mergeRange` b is the smallest range that completely contains a and b.
+mergeRange :: Range -> Range -> Range
+mergeRange (Range a b) (Range c d) = Range (first a c) (second b d)
+    where offset (AlexPn i _ _) = i
+          first x y  | offset x < offset y = x
+                     | otherwise           = y
+          second x y | offset x > offset y = x
+                     | otherwise           = y
+
 -- Given a token type, returns AlexAction which constructs that token.
 mkLexeme :: Token -> AlexAction Lexeme
-mkLexeme t (p,_,_,str) len = return $ Lexeme { position = Just p
-                                             , tok = t
-                                             , val = (take len str)
-                                             }
+mkLexeme t inp@(_,_,_,str) len = return $ Lexeme { lexemeRange = Just (mkRange inp len)
+                                                 , tok = t
+                                                 , val = (take len str)
+                                                 }
 
 -- Custom user state
 data AlexUserState = AlexUserState 
@@ -85,7 +102,7 @@ alexEOF = do
     d <- getCommentDepth
     when (d /= 0) $ 
         alexError "Unexpected EOF (open block comment)"
-    pure $ Lexeme { position = Nothing, tok = EOF, val = "" }
+    pure $ Lexeme { lexemeRange = Nothing, tok = EOF, val = "" }
 
 -- get/set comment depth
 getCommentDepth :: Alex Int

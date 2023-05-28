@@ -1,6 +1,6 @@
 module LexerSpec (spec) where
 
-import Lexer (Lexeme, Token (..), lexString, tok, val)
+import Lexer (AlexPosn (..), Lexeme (..), Range (..), Token (..), lexString, mergeRange)
 import Test.Hspec (Spec, describe, it, shouldBe)
 
 rightToMaybe :: Either a b -> Maybe b
@@ -18,7 +18,17 @@ discardPosns res = map (\l -> (tok l, val l)) <$> unwrapLexemes res
 
 spec :: Spec
 spec = do
-  describe "alexScanTokens" $ do
+  describe "mergeRange" $ do
+    it "merges disjoint ranges correctly" $
+      (Range (AlexPn 0 1 1) (AlexPn 6 1 7))
+        `mergeRange` (Range (AlexPn 8 2 2) (AlexPn 14 2 8))
+        `shouldBe` (Range (AlexPn 0 1 1) (AlexPn 14 2 8))
+    it "merges contained ranges correctly" $
+      (Range (AlexPn 0 1 1) (AlexPn 6 1 7))
+        `mergeRange` (Range (AlexPn 2 1 3) (AlexPn 5 1 6))
+        `shouldBe` (Range (AlexPn 0 1 1) (AlexPn 6 1 7))
+
+  describe "lexString" $ do
     it "fails to lex opened block comment" $
       lexString "/* this comment is open" `shouldBe` Left "Unexpected EOF (open block comment)"
 
@@ -27,6 +37,15 @@ spec = do
 
     it "successfully lexes nested block comments" $
       discardPosns (lexString "/* this comment is /* nested */ and that's okay */") `shouldBe` Just [(EOF, "")]
+
+    it "successfully tracks token range" $
+      let getPosns res = map lexemeRange <$> unwrapLexemes res
+       in getPosns (lexString "ident1\n ident2")
+            `shouldBe` Just
+              [ Just (Range (AlexPn 0 1 1) (AlexPn 6 1 7)), -- range for first identifier
+                Just (Range (AlexPn 8 2 2) (AlexPn 14 2 8)), -- range for second identifier
+                Nothing -- range for EOF
+              ]
 
     it "lexes a simple program" $
       discardPosns (lexString "let f cond = if cond then 42 else -42 in f 0")
