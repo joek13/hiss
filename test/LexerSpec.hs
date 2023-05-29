@@ -39,7 +39,7 @@ spec = do
       discardPosns (lexString "/* this comment is /* nested */ and that's okay */") `shouldBe` Just [(EOF, "")]
 
     it "successfully tracks token range" $
-      let getPosns res = map lexemeRange <$> unwrapLexemes res
+      let getPosns res = map rng <$> unwrapLexemes res
        in getPosns (lexString "ident1\n ident2")
             `shouldBe` Just
               [ Range (AlexPn 0 1 1) (AlexPn 6 1 7), -- range for first identifier
