@@ -63,7 +63,7 @@ data Range = Range AlexPosn AlexPosn
 
 -- Smallest lexical unit.
 data Lexeme = Lexeme
-    { lexemeRange    :: Maybe Range    -- range of token in source program, or Nothing if EOF
+    { lexemeRange    :: Range          -- range of token in source program
     , tok            :: Token          -- token type
     , val            :: String         -- string value of token
     }
@@ -84,7 +84,7 @@ mergeRange (Range a b) (Range c d) = Range (first a c) (second b d)
 
 -- Given a token type, returns AlexAction which constructs that token.
 mkLexeme :: Token -> AlexAction Lexeme
-mkLexeme t inp@(_,_,_,str) len = return $ Lexeme { lexemeRange = Just (mkRange inp len)
+mkLexeme t inp@(_,_,_,str) len = return $ Lexeme { lexemeRange = mkRange inp len
                                                  , tok = t
                                                  , val = (take len str)
                                                  }
@@ -102,7 +102,8 @@ alexEOF = do
     d <- getCommentDepth
     when (d /= 0) $ 
         alexError "Unexpected EOF (open block comment)"
-    pure $ Lexeme { lexemeRange = Nothing, tok = EOF, val = "" }
+    (posn, _, _, _) <- alexGetInput
+    pure $ Lexeme { lexemeRange = Range posn posn, tok = EOF, val = "" }
 
 -- get/set comment depth
 getCommentDepth :: Alex Int

@@ -42,9 +42,9 @@ spec = do
       let getPosns res = map lexemeRange <$> unwrapLexemes res
        in getPosns (lexString "ident1\n ident2")
             `shouldBe` Just
-              [ Just (Range (AlexPn 0 1 1) (AlexPn 6 1 7)), -- range for first identifier
-                Just (Range (AlexPn 8 2 2) (AlexPn 14 2 8)), -- range for second identifier
-                Nothing -- range for EOF
+              [ Range (AlexPn 0 1 1) (AlexPn 6 1 7), -- range for first identifier
+                Range (AlexPn 8 2 2) (AlexPn 14 2 8), -- range for second identifier
+                Range (AlexPn 14 2 8) (AlexPn 14 2 8) -- (empty) range for EOF
               ]
 
     it "lexes a simple program" $
