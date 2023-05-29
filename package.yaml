@@ -35,6 +35,7 @@ ghc-options:
 
 default-extensions:
 - ImportQualifiedPost
+- DeriveFoldable
 
 library:
   source-dirs: src

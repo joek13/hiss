@@ -1,8 +1,9 @@
 module Main (main) where
 
-import Lexer qualified (lexString)
+import Lexer (runAlex)
+import Parser (parseHiss)
 
 main :: IO ()
 main = do
   inp <- getContents
-  print $ Lexer.lexString inp
+  print $ runAlex inp parseHiss

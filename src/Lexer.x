@@ -1,5 +1,5 @@
 {
-module Lexer (Lexeme(..), Token(..), Alex, AlexPosn(..), Range(..), alexMonadScan, lexString, alexGetInput, alexError, mergeRange) where
+module Lexer (Lexeme(..), Token(..), Alex, AlexPosn(..), Range(..), alexMonadScan, lexString, runAlex, alexGetInput, alexError, mergeRange) where
 import Control.Monad (when)
 }
 
