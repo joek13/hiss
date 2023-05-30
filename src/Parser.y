@@ -1,7 +1,7 @@
 {
 module Parser ( parseHiss ) where
 import Lexer ( Lexeme(..), Token(..), Range(..), AlexPosn(..), Alex, mergeRange, alexError, alexGetInput, alexMonadScan )
-import AST( Exp(..), Name(..), BinOp(..), LetBinding(..), info )
+import AST( Exp(..), Name(..), BinOp(..), LetBinding(..), getAnn )
 import Data.Maybe (fromJust)
 }
 
@@ -51,11 +51,11 @@ letBinding : ident                        { mkLetBinding $1 }
 {
 mkIf :: Exp Range -> Exp Range -> Exp Range -> Exp Range
 mkIf e1 e2 e3 = EIf r e1 e2 e3
-    where r = (info e1) `mergeRange` (info e2) `mergeRange` (info e3)
+    where r = (getAnn e1) `mergeRange` (getAnn e2) `mergeRange` (getAnn e3)
 
 mkLetIn :: LetBinding Range -> Exp Range -> Exp Range -> Exp Range
 mkLetIn binding e1 e2 = ELetIn r binding e1 e2
-    where r = (info binding) `mergeRange` (info e1) `mergeRange` (info e2) 
+    where r = (getAnn binding) `mergeRange` (getAnn e1) `mergeRange` (getAnn e2) 
 
 mkLetBinding :: Lexeme -> LetBinding Range
 mkLetBinding Lexeme { tok=Ident, val=name, rng=r } = LetBinding r (Name r name) []
@@ -70,7 +70,7 @@ letBindingAppendArg _ _ = error "Compiler bug: letBindingAppendArg called with a
 
 mkBinOp :: Exp Range -> BinOp -> Exp Range -> Exp Range
 mkBinOp e1 op e2 = EBinOp r e1 op e2
-    where r = (info e1) `mergeRange` (info e2)
+    where r = (getAnn e1) `mergeRange` (getAnn e2)
 
 mkParen :: Lexeme -> Exp Range -> Lexeme -> Exp Range
 mkParen Lexeme { rng = lRng } e1 Lexeme { rng = rRng } = EParen r (e1)

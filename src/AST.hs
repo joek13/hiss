@@ -1,27 +1,11 @@
-module AST (Name (..), BinOp (..), LetBinding (..), Exp (..), info) where
+module AST (Name (..), BinOp (..), LetBinding (..), Exp (..), getAnn, stripAnns) where
 
 import Data.Maybe (fromJust)
 import Data.Monoid (getFirst)
 
--- Unsafely grabs the information field from a Foldable, e.g., an AST node.
-info :: Foldable t => t a -> a
-info = fromJust . getFirst . foldMap pure
-
-data Name a = Name a String
-  deriving (Show, Foldable)
-
-data BinOp
-  = Add
-  | Sub
-  | Mult
-  | Div
-  deriving (Eq, Show)
-
--- Let binding
--- Given by a name, and, in the case of a function, one or more argument names.
-data LetBinding a = LetBinding a (Name a) [Name a]
-  deriving (Show, Foldable)
-
+-- AST expression.
+-- For Exp and other AST node types, we include a type argument a, which we can use
+-- to annotate the syntax tree with, e.g., source program range information.
 data Exp a
   = EInt a Integer -- <int>
   | EVar a (Name a) -- <var>
@@ -30,3 +14,44 @@ data Exp a
   | EIf a (Exp a) (Exp a) (Exp a) -- if <exp1> then <exp2> else <exp3>
   | EParen a (Exp a) -- (<exp1>)
   deriving (Show, Foldable)
+
+-- Unsafely grabs annotation field from an AST node.
+getAnn :: Foldable t => t a -> a
+getAnn = fromJust . getFirst . foldMap pure
+
+-- Recursively strips annotations from an AST.
+stripAnns :: Exp a -> Exp ()
+stripAnns = mapAnn (const ())
+
+-- Recursively applies f to each AST node's annotation.
+mapAnn :: (a -> b) -> Exp a -> Exp b
+mapAnn f (EInt a i) = EInt (f a) i
+mapAnn f (EVar a n) = EVar (f a) (nameMapAnn f n)
+mapAnn f (EBinOp a e1 op e2) = EBinOp (f a) (mapAnn f e1) op (mapAnn f e2)
+mapAnn f (ELetIn a lb e1 e2) = ELetIn (f a) (letBindingMapAnn f lb) (mapAnn f e1) (mapAnn f e2)
+mapAnn f (EIf a e1 e2 e3) = EIf (f a) (mapAnn f e1) (mapAnn f e2) (mapAnn f e3)
+mapAnn f (EParen a e1) = EParen (f a) (mapAnn f e1)
+
+-- Name of a variable.
+data Name a = Name a String
+  deriving (Show, Foldable)
+
+-- Applies f to a Name's annotation.
+nameMapAnn :: (a -> b) -> Name a -> Name b
+nameMapAnn f (Name a n) = Name (f a) n
+
+data BinOp
+  = Add
+  | Sub
+  | Mult
+  | Div
+  deriving (Eq, Show)
+
+-- Let binding (e.g., `flip f x y`)
+-- Given by a name, and, in the case of a function, one or more argument names.
+data LetBinding a = LetBinding a (Name a) [Name a]
+  deriving (Show, Foldable)
+
+-- Recursively applies f to a LetBinding's annotation and the annotations of its Names.
+letBindingMapAnn :: (a -> b) -> LetBinding a -> LetBinding b
+letBindingMapAnn f (LetBinding a n args) = LetBinding (f a) (nameMapAnn f n) (map (nameMapAnn f) args)
