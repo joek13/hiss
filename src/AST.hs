@@ -3,6 +3,13 @@ module AST (Name (..), BinOp (..), LetBinding (..), Exp (..), getAnn, stripAnns)
 import Data.Maybe (fromJust)
 import Data.Monoid (getFirst)
 
+data BinOp
+  = Add
+  | Sub
+  | Mult
+  | Div
+  deriving (Eq, Show)
+
 -- AST expression.
 -- For Exp and other AST node types, we include a type argument a, which we can use
 -- to annotate the syntax tree with, e.g., source program range information.
@@ -39,13 +46,6 @@ data Name a = Name a String
 -- Applies f to a Name's annotation.
 nameMapAnn :: (a -> b) -> Name a -> Name b
 nameMapAnn f (Name a n) = Name (f a) n
-
-data BinOp
-  = Add
-  | Sub
-  | Mult
-  | Div
-  deriving (Eq, Show)
 
 -- Let binding (e.g., `flip f x y`)
 -- Given by a name, and, in the case of a function, one or more argument names.

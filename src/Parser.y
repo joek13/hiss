@@ -50,18 +50,31 @@ letBinding : ident                        { mkLetBinding $1 }
            | letBinding ident             { letBindingAppendArg $1 $2 }
 
 {
-mkInt :: Lexeme -> Exp Range
-mkInt Lexeme { tok=Int, val=str, rng=r } = EInt r (read str)
-mkInt _ = error "Compiler bug: mkInt called with a non-int lexeme"
+mkLetIn :: LetBinding Range -> Exp Range -> Exp Range -> Exp Range
+mkLetIn binding e1 e2 = ELetIn r binding e1 e2
+    where r = (getAnn binding) `mergeRange` (getAnn e1) `mergeRange` (getAnn e2) 
 
 mkIf :: Exp Range -> Exp Range -> Exp Range -> Exp Range
 mkIf e1 e2 e3 = EIf r e1 e2 e3
     where r = (getAnn e1) `mergeRange` (getAnn e2) `mergeRange` (getAnn e3)
 
-mkLetIn :: LetBinding Range -> Exp Range -> Exp Range -> Exp Range
-mkLetIn binding e1 e2 = ELetIn r binding e1 e2
-    where r = (getAnn binding) `mergeRange` (getAnn e1) `mergeRange` (getAnn e2) 
+mkInt :: Lexeme -> Exp Range
+mkInt Lexeme { tok=Int, val=str, rng=r } = EInt r (read str)
+mkInt _ = error "Compiler bug: mkInt called with a non-int lexeme"
 
+mkVar :: Lexeme -> Exp Range
+mkVar Lexeme { rng = rng, tok = tok, val = val }
+    = EVar rng (Name rng val)
+
+mkBinOp :: Exp Range -> BinOp -> Exp Range -> Exp Range
+mkBinOp e1 op e2 = EBinOp r e1 op e2
+    where r = (getAnn e1) `mergeRange` (getAnn e2)
+
+mkParen :: Lexeme -> Exp Range -> Lexeme -> Exp Range
+mkParen Lexeme { rng = lRng } e1 Lexeme { rng = rRng } = EParen r (e1)
+    where r = lRng `mergeRange` rRng
+
+-- Creates a let binding with a name and no arguments.
 mkLetBinding :: Lexeme -> LetBinding Range
 mkLetBinding Lexeme { tok=Ident, val=name, rng=r } = LetBinding r (Name r name) []
 mkLetBinding _ = error "Compiler bug: mkLetBinding called with a non-identifier lexeme"
@@ -73,18 +86,6 @@ letBindingAppendArg (LetBinding r1 name names) Lexeme { tok=Ident, val=newName, 
     where r' = r1 `mergeRange` r2
 letBindingAppendArg _ _ = error "Compiler bug: letBindingAppendArg called with a non-identifier lexeme"
 
-mkBinOp :: Exp Range -> BinOp -> Exp Range -> Exp Range
-mkBinOp e1 op e2 = EBinOp r e1 op e2
-    where r = (getAnn e1) `mergeRange` (getAnn e2)
-
-mkParen :: Lexeme -> Exp Range -> Lexeme -> Exp Range
-mkParen Lexeme { rng = lRng } e1 Lexeme { rng = rRng } = EParen r (e1)
-    where r = lRng `mergeRange` rRng
-
-mkVar :: Lexeme -> Exp Range
-mkVar Lexeme { rng = rng, tok = tok, val = val }
-    = EVar rng (Name rng val)
-
 parseError :: Lexeme -> Alex a
 parseError _ = do
     (AlexPn _ line col, _, _, _) <- alexGetInput
@@ -92,5 +93,4 @@ parseError _ = do
 
 lexer :: (Lexeme -> Alex a) -> Alex a
 lexer = (=<< alexMonadScan)
-
 }
