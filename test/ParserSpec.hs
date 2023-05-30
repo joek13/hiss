@@ -1,6 +1,6 @@
 module ParserSpec (spec) where
 
-import AST (BinOp (..), Exp (..), LetBinding (..), Name (..), stripAnns)
+import AST (BinOp (..), Exp (..), FunApp (..), LetBinding (..), Name (..), stripAnns)
 import Lexer (Range, runAlex)
 import Parser (parseHiss)
 import Test.Hspec (Spec, describe, it, shouldBe)
@@ -57,6 +57,20 @@ spec = do
               (LetBinding () (Name () "b") [])
               (EInt () 1)
               (EBinOp () (EVar () (Name () "a")) Add (EVar () (Name () "b")))
+          )
+    it "respects left associativity of function application" $
+      stripAnns (fromRight $ parseString "f 0 1 2") -- i.e., f applied to 0,1,2 and not f (0 (1 2))
+        `shouldBe` EFunApp
+          ()
+          (FunApp () (EVar () (Name () "f")) [EInt () 0, EInt () 1, EInt () 2])
+    it "respects precedence of addition over function application" $
+      stripAnns (fromRight $ parseString "f a + b c") -- i.e., f (a + b) c
+        `shouldBe` EFunApp
+          ()
+          ( FunApp
+              ()
+              (EVar () (Name () "f"))
+              [EBinOp () (EVar () (Name () "a")) Add (EVar () (Name () "b")), EVar () (Name () "c")]
           )
     it "fails to parse a simple invalid program" $
       -- can only have names in a let binding. 'f 0' is the problem.
