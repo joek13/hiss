@@ -20,7 +20,7 @@ data Exp a
   | ELetIn a (LetBinding a) (Exp a) (Exp a) -- let <binding> = <exp1> in <exp2>
   | EIf a (Exp a) (Exp a) (Exp a) -- if <exp1> then <exp2> else <exp3>
   | EParen a (Exp a) -- (<exp1>)
-  deriving (Show, Foldable)
+  deriving (Eq, Show, Foldable)
 
 -- Unsafely grabs annotation field from an AST node.
 getAnn :: Foldable t => t a -> a
@@ -41,7 +41,7 @@ mapAnn f (EParen a e1) = EParen (f a) (mapAnn f e1)
 
 -- Name of a variable.
 data Name a = Name a String
-  deriving (Show, Foldable)
+  deriving (Eq, Show, Foldable)
 
 -- Applies f to a Name's annotation.
 nameMapAnn :: (a -> b) -> Name a -> Name b
@@ -50,7 +50,7 @@ nameMapAnn f (Name a n) = Name (f a) n
 -- Let binding (e.g., `flip f x y`)
 -- Given by a name, and, in the case of a function, one or more argument names.
 data LetBinding a = LetBinding a (Name a) [Name a]
-  deriving (Show, Foldable)
+  deriving (Eq, Show, Foldable)
 
 -- Recursively applies f to a LetBinding's annotation and the annotations of its Names.
 letBindingMapAnn :: (a -> b) -> LetBinding a -> LetBinding b
