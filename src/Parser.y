@@ -1,7 +1,7 @@
 {
 module Parser ( parseHiss ) where
 import Lexer ( Lexeme(..), Token(..), Range(..), AlexPosn(..), Alex, mergeRange, alexError, alexGetInput, alexMonadScan )
-import AST( Exp(..), Name(..), BinOp(..), LetBinding(..), getAnn )
+import AST( Exp(..), Name(..), BinOp(..), LetBinding(..), FunApp(..), getAnn )
 import Data.Maybe (fromJust)
 }
 
@@ -10,8 +10,9 @@ import Data.Maybe (fromJust)
 %error { parseError }
 %monad { Alex } { >>= } { pure }
 %lexer { lexer } { Lexeme { tok = EOF } }
+%expect 0 -- compile error if shift/reduce or reduce/reduce conflicts exist
 
--- associativity
+-- associativity and operator precedence
 %right 'else'
 %right 'in' 
 %left '+' '-'
@@ -36,18 +37,27 @@ import Data.Maybe (fromJust)
 
 %%
 
-exp : 'let' letBinding '=' exp 'in' exp   { mkLetIn $2 $4 $6}
-    | 'if' exp 'then' exp 'else' exp      { mkIf $2 $4 $6 }
-    | int                                 { mkInt $1 }
-    | ident                               { mkVar $1 } 
-    | exp '*' exp                         { mkBinOp $1 Mult $3 }
-    | exp '/' exp                         { mkBinOp $1 Div $3 }
-    | exp '+' exp                         { mkBinOp $1 Add $3 }
-    | exp '-' exp                         { mkBinOp $1 Sub $3 }
-    | '(' exp ')'                         { mkParen $1 $2 $3 }
+exp : atom %shift                          { $1 }
+    | funApp %shift                        { mkFunAppExp $1 }
 
-letBinding : ident                        { mkLetBinding $1 }
-           | letBinding ident             { letBindingAppendArg $1 $2 }
+-- expression atom, i.e., an expression that is not a function application
+-- factoring out atom forces left-associativity of function application
+atom : 'let' letBinding '=' exp 'in' exp   { mkLetIn $2 $4 $6}
+     | 'if' exp 'then' exp 'else' exp      { mkIf $2 $4 $6 }
+     | int                                 { mkInt $1 }
+     | ident                               { mkVar $1 } 
+     | atom '*' atom                       { mkBinOp $1 Mult $3 }
+     | atom '/' atom                       { mkBinOp $1 Div $3 }
+     | atom '+' atom                       { mkBinOp $1 Add $3 }
+     | atom '-' atom                       { mkBinOp $1 Sub $3 }
+     | '(' exp ')'                         { mkParen $1 $2 $3 }
+
+letBinding : ident                         { mkLetBinding $1 }
+           | letBinding ident              { letBindingAppendArg $1 $2 }
+
+-- using atom here ensures that 'f a b c' parses as 'f applied to a,b,c' and not 'f (a (b c))'
+funApp : atom atom %shift                  { mkFunApp $1 $2 }
+       | funApp atom %shift                { funAppAppendArg $1 $2 }
 
 {
 mkLetIn :: LetBinding Range -> Exp Range -> Exp Range -> Exp Range
@@ -65,6 +75,9 @@ mkInt _ = error "Compiler bug: mkInt called with a non-int lexeme"
 mkVar :: Lexeme -> Exp Range
 mkVar Lexeme { rng = rng, tok = tok, val = val }
     = EVar rng (Name rng val)
+
+mkFunAppExp :: FunApp Range -> Exp Range
+mkFunAppExp funApp = EFunApp (getAnn funApp) funApp
 
 mkBinOp :: Exp Range -> BinOp -> Exp Range -> Exp Range
 mkBinOp e1 op e2 = EBinOp r e1 op e2
@@ -85,6 +98,16 @@ letBindingAppendArg (LetBinding r1 name names) Lexeme { tok=Ident, val=newName, 
     = LetBinding r' name (names ++ [ Name r2 newName ])
     where r' = r1 `mergeRange` r2
 letBindingAppendArg _ _ = error "Compiler bug: letBindingAppendArg called with a non-identifier lexeme"
+
+-- Creates a function application with a function name and one argument
+mkFunApp :: Exp Range -> Exp Range -> FunApp Range
+mkFunApp e1 e2 = FunApp r e1 [e2]
+    where r = (getAnn e1) `mergeRange` (getAnn e2)
+
+-- Appends an argument to an existing function application
+funAppAppendArg :: FunApp Range -> Exp Range -> FunApp Range
+funAppAppendArg (FunApp r1 fun args) e1 = FunApp r' fun (args ++ [e1])
+    where r' = r1 `mergeRange` (getAnn e1)
 
 parseError :: Lexeme -> Alex a
 parseError _ = do

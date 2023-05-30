@@ -1,4 +1,4 @@
-module AST (Name (..), BinOp (..), LetBinding (..), Exp (..), getAnn, stripAnns) where
+module AST (Name (..), BinOp (..), LetBinding (..), Exp (..), FunApp (..), getAnn, stripAnns) where
 
 import Data.Maybe (fromJust)
 import Data.Monoid (getFirst)
@@ -16,6 +16,7 @@ data BinOp
 data Exp a
   = EInt a Integer -- <int>
   | EVar a (Name a) -- <var>
+  | EFunApp a (FunApp a) -- <exp1> <exp2> (<exp3> <exp4> ...)
   | EBinOp a (Exp a) BinOp (Exp a) -- <exp1> <binop> <exp2>
   | ELetIn a (LetBinding a) (Exp a) (Exp a) -- let <binding> = <exp1> in <exp2>
   | EIf a (Exp a) (Exp a) (Exp a) -- if <exp1> then <exp2> else <exp3>
@@ -34,6 +35,7 @@ stripAnns = mapAnn (const ())
 mapAnn :: (a -> b) -> Exp a -> Exp b
 mapAnn f (EInt a i) = EInt (f a) i
 mapAnn f (EVar a n) = EVar (f a) (nameMapAnn f n)
+mapAnn f (EFunApp a funApp) = EFunApp (f a) (funAppMapAnn f funApp)
 mapAnn f (EBinOp a e1 op e2) = EBinOp (f a) (mapAnn f e1) op (mapAnn f e2)
 mapAnn f (ELetIn a lb e1 e2) = ELetIn (f a) (letBindingMapAnn f lb) (mapAnn f e1) (mapAnn f e2)
 mapAnn f (EIf a e1 e2 e3) = EIf (f a) (mapAnn f e1) (mapAnn f e2) (mapAnn f e3)
@@ -55,3 +57,9 @@ data LetBinding a = LetBinding a (Name a) [Name a]
 -- Recursively applies f to a LetBinding's annotation and the annotations of its Names.
 letBindingMapAnn :: (a -> b) -> LetBinding a -> LetBinding b
 letBindingMapAnn f (LetBinding a n args) = LetBinding (f a) (nameMapAnn f n) (map (nameMapAnn f) args)
+
+data FunApp a = FunApp a (Exp a) [Exp a]
+  deriving (Eq, Show, Foldable)
+
+funAppMapAnn :: (a -> b) -> FunApp a -> FunApp b
+funAppMapAnn f (FunApp a fun args) = FunApp (f a) (mapAnn f fun) (map (mapAnn f) args)
