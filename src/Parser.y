@@ -38,6 +38,7 @@ import Data.Maybe (fromJust)
 
 exp : 'let' letBinding '=' exp 'in' exp   { mkLetIn $2 $4 $6}
     | 'if' exp 'then' exp 'else' exp      { mkIf $2 $4 $6 }
+    | int                                 { mkInt $1 }
     | ident                               { mkVar $1 } 
     | exp '*' exp                         { mkBinOp $1 Mult $3 }
     | exp '/' exp                         { mkBinOp $1 Div $3 }
@@ -49,6 +50,10 @@ letBinding : ident                        { mkLetBinding $1 }
            | letBinding ident             { letBindingAppendArg $1 $2 }
 
 {
+mkInt :: Lexeme -> Exp Range
+mkInt Lexeme { tok=Int, val=str, rng=r } = EInt r (read str)
+mkInt _ = error "Compiler bug: mkInt called with a non-int lexeme"
+
 mkIf :: Exp Range -> Exp Range -> Exp Range -> Exp Range
 mkIf e1 e2 e3 = EIf r e1 e2 e3
     where r = (getAnn e1) `mergeRange` (getAnn e2) `mergeRange` (getAnn e3)
