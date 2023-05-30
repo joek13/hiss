@@ -42,15 +42,15 @@ exp : atom %shift                          { $1 }
 
 -- expression atom, i.e., an expression that is not a function application
 -- factoring out atom forces left-associativity of function application
-atom : 'let' letBinding '=' exp 'in' exp   { mkLetIn $2 $4 $6}
-     | 'if' exp 'then' exp 'else' exp      { mkIf $2 $4 $6 }
-     | int                                 { mkInt $1 }
-     | ident                               { mkVar $1 } 
-     | atom '*' atom                       { mkBinOp $1 Mult $3 }
-     | atom '/' atom                       { mkBinOp $1 Div $3 }
-     | atom '+' atom                       { mkBinOp $1 Add $3 }
-     | atom '-' atom                       { mkBinOp $1 Sub $3 }
-     | '(' exp ')'                         { mkParen $1 $2 $3 }
+atom : 'let' letBinding '=' exp 'in' exp   { mkLetInExp $2 $4 $6}
+     | 'if' exp 'then' exp 'else' exp      { mkIfExp $2 $4 $6 }
+     | int                                 { mkIntExp $1 }
+     | ident                               { mkVarExp $1 } 
+     | atom '*' atom                       { mkBinOpExp $1 Mult $3 }
+     | atom '/' atom                       { mkBinOpExp $1 Div $3 }
+     | atom '+' atom                       { mkBinOpExp $1 Add $3 }
+     | atom '-' atom                       { mkBinOpExp $1 Sub $3 }
+     | '(' exp ')'                         { mkParenExp $1 $2 $3 }
 
 letBinding : ident                         { mkLetBinding $1 }
            | letBinding ident              { letBindingAppendArg $1 $2 }
@@ -60,31 +60,31 @@ funApp : atom atom %shift                  { mkFunApp $1 $2 }
        | funApp atom %shift                { funAppAppendArg $1 $2 }
 
 {
-mkLetIn :: LetBinding Range -> Exp Range -> Exp Range -> Exp Range
-mkLetIn binding e1 e2 = ELetIn r binding e1 e2
+mkLetInExp :: LetBinding Range -> Exp Range -> Exp Range -> Exp Range
+mkLetInExp binding e1 e2 = ELetIn r binding e1 e2
     where r = (getAnn binding) `mergeRange` (getAnn e1) `mergeRange` (getAnn e2) 
 
-mkIf :: Exp Range -> Exp Range -> Exp Range -> Exp Range
-mkIf e1 e2 e3 = EIf r e1 e2 e3
+mkIfExp :: Exp Range -> Exp Range -> Exp Range -> Exp Range
+mkIfExp e1 e2 e3 = EIf r e1 e2 e3
     where r = (getAnn e1) `mergeRange` (getAnn e2) `mergeRange` (getAnn e3)
 
-mkInt :: Lexeme -> Exp Range
-mkInt Lexeme { tok=Int, val=str, rng=r } = EInt r (read str)
-mkInt _ = error "Compiler bug: mkInt called with a non-int lexeme"
+mkIntExp :: Lexeme -> Exp Range
+mkIntExp Lexeme { tok=Int, val=str, rng=r } = EInt r (read str)
+mkIntExp _ = error "Compiler bug: mkIntExp called with a non-int lexeme"
 
-mkVar :: Lexeme -> Exp Range
-mkVar Lexeme { rng = rng, tok = tok, val = val }
+mkVarExp :: Lexeme -> Exp Range
+mkVarExp Lexeme { rng = rng, tok = tok, val = val }
     = EVar rng (Name rng val)
 
 mkFunAppExp :: FunApp Range -> Exp Range
 mkFunAppExp funApp = EFunApp (getAnn funApp) funApp
 
-mkBinOp :: Exp Range -> BinOp -> Exp Range -> Exp Range
-mkBinOp e1 op e2 = EBinOp r e1 op e2
+mkBinOpExp :: Exp Range -> BinOp -> Exp Range -> Exp Range
+mkBinOpExp e1 op e2 = EBinOp r e1 op e2
     where r = (getAnn e1) `mergeRange` (getAnn e2)
 
-mkParen :: Lexeme -> Exp Range -> Lexeme -> Exp Range
-mkParen Lexeme { rng = lRng } e1 Lexeme { rng = rRng } = EParen r (e1)
+mkParenExp :: Lexeme -> Exp Range -> Lexeme -> Exp Range
+mkParenExp Lexeme { rng = lRng } e1 Lexeme { rng = rRng } = EParen r (e1)
     where r = lRng `mergeRange` rRng
 
 -- Creates a let binding with a name and no arguments.
