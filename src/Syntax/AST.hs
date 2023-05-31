@@ -1,7 +1,8 @@
-module Syntax.AST (Name (..), BinOp (..), LetBinding (..), Exp (..), FunApp (..), getAnn, mapAnn, stripAnns) where
+module Syntax.AST (Name (..), BinOp (..), LetBinding (..), Exp (..), FunApp (..), getAnn, mapAnn, stripAnns, getIdent) where
 
 import Data.Maybe (fromJust)
 import Data.Monoid (getFirst)
+import Data.Ord (comparing)
 
 data BinOp
   = Add
@@ -43,7 +44,18 @@ mapAnn f (EParen a e1) = EParen (f a) (mapAnn f e1)
 
 -- Name of a variable.
 data Name a = Name a String
-  deriving (Eq, Show, Foldable)
+  deriving (Show, Foldable)
+
+-- Gets identifier for a Name.
+getIdent :: Name a -> String
+getIdent (Name _ s) = s
+
+-- Names compare by their string value.
+instance Eq (Name a) where
+  (Name _ s1) == (Name _ s2) = s1 == s2
+
+instance Eq a => Ord (Name a) where
+  compare = comparing getIdent
 
 -- Applies f to a Name's annotation.
 nameMapAnn :: (a -> b) -> Name a -> Name b

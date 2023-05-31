@@ -1,6 +1,6 @@
 module Main (main) where
 
-import Syntax.AST (stripAnns)
+import Interpreter.TreeWalker qualified as Interpreter (eval)
 import Syntax.Lexer (runAlex)
 import Syntax.Parser (parseHiss)
 
@@ -10,6 +10,6 @@ main = do
   let res = runAlex inp parseHiss
   case res of
     Right ast -> do
-      print $ stripAnns $ ast
+      print $ Interpreter.eval ast
     Left msg -> do
       print msg

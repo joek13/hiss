@@ -42,6 +42,8 @@ library:
   dependencies:
   - array
   - base
+  - mtl
+  - containers
   build-tools:
   - alex
   - happy
