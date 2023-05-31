@@ -1,6 +1,6 @@
-module LexerSpec (spec) where
+module Syntax.LexerSpec (spec) where
 
-import Lexer (AlexPosn (..), Lexeme (..), Range (..), Token (..), lexString, mergeRange)
+import Syntax.Lexer (AlexPosn (..), Lexeme (..), Range (..), Token (..), lexString, mergeRange)
 import Test.Hspec (Spec, describe, it, shouldBe)
 
 rightToMaybe :: Either a b -> Maybe b

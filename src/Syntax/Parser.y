@@ -1,7 +1,7 @@
 {
-module Parser ( parseHiss ) where
-import Lexer ( Lexeme(..), Token(..), Range(..), AlexPosn(..), Alex, mergeRange, alexError, alexGetInput, alexMonadScan )
-import AST( Exp(..), Name(..), BinOp(..), LetBinding(..), FunApp(..), getAnn )
+module Syntax.Parser ( parseHiss ) where
+import Syntax.Lexer ( Lexeme(..), Token(..), Range(..), AlexPosn(..), Alex, mergeRange, alexError, alexGetInput, alexMonadScan )
+import Syntax.AST( Exp(..), Name(..), BinOp(..), LetBinding(..), FunApp(..), getAnn )
 import Data.Maybe (fromJust)
 }
 

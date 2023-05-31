@@ -1,8 +1,8 @@
-module ParserSpec (spec) where
+module Syntax.ParserSpec (spec) where
 
-import AST (BinOp (..), Exp (..), FunApp (..), LetBinding (..), Name (..), stripAnns)
-import Lexer (Range, runAlex)
-import Parser (parseHiss)
+import Syntax.AST (BinOp (..), Exp (..), FunApp (..), LetBinding (..), Name (..), stripAnns)
+import Syntax.Lexer (Range, runAlex)
+import Syntax.Parser (parseHiss)
 import Test.Hspec (Spec, describe, it, shouldBe)
 
 parseString :: String -> Either String (Exp Range)
