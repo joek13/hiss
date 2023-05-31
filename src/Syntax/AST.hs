@@ -1,4 +1,4 @@
-module Syntax.AST (Name (..), BinOp (..), LetBinding (..), Exp (..), FunApp (..), getAnn, stripAnns) where
+module Syntax.AST (Name (..), BinOp (..), LetBinding (..), Exp (..), FunApp (..), getAnn, mapAnn, stripAnns) where
 
 import Data.Maybe (fromJust)
 import Data.Monoid (getFirst)
