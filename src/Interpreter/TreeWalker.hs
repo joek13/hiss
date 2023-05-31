@@ -79,17 +79,23 @@ insertBinding name val = do
   return env
 
 evalFunApp :: FunApp () -> Hiss HissValue
-evalFunApp (FunApp () fun argExprs) = do
+evalFunApp (FunApp () fun argExps) = do
   funVal <- eval' fun
   case funVal of
     (Func argNames body) -> do
-      argVals <- mapM eval' argExprs
-      env <- get
-      -- insert binding for each function argument
-      zipWithM_ insertBinding argNames argVals
-      -- evaluate function body
-      retVal <- eval' body
-      -- restore old environment
-      put env
-      return retVal
+      case compare (length argExps) (length argNames) of
+        EQ -> do
+          -- all arguments present: apply the function
+          -- evaluate arguments
+          argVals <- mapM eval' argExps
+          env <- get
+          -- insert binding for each function argument
+          zipWithM_ insertBinding argNames argVals
+          -- evaluate function body
+          retVal <- eval' body
+          -- restore old environment
+          put env
+          return retVal
+        LT -> error "Partial function application is unimplemented!"
+        GT -> error $ "Type error: function expects " <> show (length argNames) <> " arguments, but " <> show (length argExps) <> " were provided."
     x -> error $ "Type error: " <> show x <> " is not a function"
