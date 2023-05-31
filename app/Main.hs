@@ -1,9 +1,15 @@
 module Main (main) where
 
-import Lexer (runAlex)
-import Parser (parseHiss)
+import Syntax.AST (stripAnns)
+import Syntax.Lexer (runAlex)
+import Syntax.Parser (parseHiss)
 
 main :: IO ()
 main = do
   inp <- getContents
-  print $ runAlex inp parseHiss
+  let res = runAlex inp parseHiss
+  case res of
+    Right ast -> do
+      print $ stripAnns $ ast
+    Left msg -> do
+      print msg
