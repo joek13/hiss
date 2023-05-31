@@ -9,11 +9,13 @@ data HissValue
   | Func [Name ()] (Exp ())
   deriving (Eq, Show)
 
+-- An Environment maps names to their value.
 type Environment = Map (Name ()) HissValue
 
 -- Hiss evaluation monad.
 type Hiss = State Environment
 
+-- Evaluates an AST.
 eval :: Exp a -> HissValue
 eval e = evalState (eval' e') empty
   where
@@ -36,6 +38,7 @@ eval' (EVar () n) = do
     Nothing -> error $ "Name error: name " <> getIdent n <> " undefined in current environment"
 eval' (ELetIn () lb valExp inExp) = do
   case lb of
+    -- variable binding
     LetBinding () n [] -> do
       val <- eval' valExp -- compute value
       env <- insertBinding n val -- bind n to val
@@ -46,6 +49,7 @@ eval' (ELetIn () lb valExp inExp) = do
       -- restore old environment
       put env
       return inVal
+    -- function binding
     LetBinding () n args -> do
       -- TODO collect names to create closures
 
