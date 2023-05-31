@@ -61,7 +61,12 @@ eval' (ELetIn () lb valExp inExp) = do
       put env
       return inVal
 eval' (EFunApp () funApp) = evalFunApp funApp
-eval' _ = error "Unimplemented!"
+eval' (EIf () condExp thenExp elseExp) = do
+  condVal <- eval' condExp
+  case condVal of
+    Int 0 -> eval' elseExp
+    Int _ -> eval' thenExp
+    _ -> error "Type error: if-then-else condition must be an integer"
 
 evalBinOp :: BinOp -> HissValue -> HissValue -> HissValue
 evalBinOp Add (Int a) (Int b) = Int (a + b)
