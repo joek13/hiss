@@ -1,7 +1,7 @@
 module Syntax.ParserSpec (spec) where
 
-import Syntax.AST (BinOp (..), Exp (..), FunApp (..), LetBinding (..), Name (..), stripAnns)
-import Syntax.Lexer (Range, runAlex)
+import Syntax.AST (BinOp (..), Exp (..), FunApp (..), LetBinding (..), Name (..), getAnn, stripAnns)
+import Syntax.Lexer (AlexPosn (AlexPn), Range (..), runAlex)
 import Syntax.Parser (parseHiss)
 import Test.Hspec (Spec, describe, it, shouldBe)
 
@@ -70,6 +70,9 @@ spec = do
           (EFunApp () (FunApp () (EVar () (Name () "f")) [EVar () (Name () "a")]))
           Mult
           (EFunApp () (FunApp () (EVar () (Name () "b")) [EVar () (Name () "c")]))
+    it "correctly tracks range of compound expressions" $
+      getAnn (fromRight $ parseString "(if a then b else c)")
+        `shouldBe` Range (AlexPn 0 1 1) (AlexPn 20 1 21)
     it "fails to parse a simple invalid program" $
       -- can only have names in a let binding. 'f 0' is the problem.
       parseString "let f 0 = 0 in 123" `shouldBe` Left "Parse error at line 1, column 8"
