@@ -37,25 +37,29 @@ import Data.Maybe (fromJust)
 
 %%
 
-exp : atom %shift                          { $1 }
-    | funApp %shift                        { mkFunAppExp $1 }
-
--- expression atom, i.e., an expression that is not a function application
--- factoring out atom forces left-associativity of function application
-atom : 'let' letBinding '=' exp 'in' exp   { mkLetInExp $2 $4 $6}
+exp  : exp1                                { $1 }
+     | funApp                              { mkFunAppExp $1 }
+     | 'let' letBinding '=' exp 'in' exp   { mkLetInExp $2 $4 $6}
      | 'if' exp 'then' exp 'else' exp      { mkIfExp $2 $4 $6 }
-     | int                                 { mkIntExp $1 }
-     | ident                               { mkVarExp $1 } 
-     | atom '*' atom                       { mkBinOpExp $1 Mult $3 }
-     | atom '/' atom                       { mkBinOpExp $1 Div $3 }
-     | atom '+' atom                       { mkBinOpExp $1 Add $3 }
-     | atom '-' atom                       { mkBinOpExp $1 Sub $3 }
+
+exp1 : atom                                { $1 }
+     | exp '*' exp                         { mkBinOpExp $1 Mult $3 }
+     | exp '/' exp                         { mkBinOpExp $1 Div $3 }
+     | exp '+' exp                         { mkBinOpExp $1 Add $3 }
+     | exp '-' exp                         { mkBinOpExp $1 Sub $3 }
+
+-- smallest expression: some literal or a parenthesized expression
+atom : int                                 { mkIntExp $1 }
+     | ident                               { mkVarExp $1 }
      | '(' exp ')'                         { mkParenExp $1 $2 $3 }
 
+-- a let binding is simply one or more names
 letBinding : ident                         { mkLetBinding $1 }
            | letBinding ident              { letBindingAppendArg $1 $2 }
 
--- using atom here ensures that 'f a b c' parses as 'f applied to a,b,c' and not 'f (a (b c))'
+-- using atom here ensures two things:
+-- function application binds more tightly than any binary operators (e.g., f a + f b = (f a) + (f b) )
+-- function application is left associative (e.g., f a b c = f applied to a,b,c )
 funApp : atom atom %shift                  { mkFunApp $1 $2 }
        | funApp atom %shift                { funAppAppendArg $1 $2 }
 

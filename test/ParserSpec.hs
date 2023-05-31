@@ -63,15 +63,13 @@ spec = do
         `shouldBe` EFunApp
           ()
           (FunApp () (EVar () (Name () "f")) [EInt () 0, EInt () 1, EInt () 2])
-    it "respects precedence of addition over function application" $
-      stripAnns (fromRight $ parseString "f a + b c") -- i.e., f (a + b) c
-        `shouldBe` EFunApp
+    it "respects precedence of function application over multiplication" $
+      stripAnns (fromRight $ parseString "f a * b c") -- i.e., (f a) * (f b)
+        `shouldBe` EBinOp
           ()
-          ( FunApp
-              ()
-              (EVar () (Name () "f"))
-              [EBinOp () (EVar () (Name () "a")) Add (EVar () (Name () "b")), EVar () (Name () "c")]
-          )
+          (EFunApp () (FunApp () (EVar () (Name () "f")) [EVar () (Name () "a")]))
+          Mult
+          (EFunApp () (FunApp () (EVar () (Name () "b")) [EVar () (Name () "c")]))
     it "fails to parse a simple invalid program" $
       -- can only have names in a let binding. 'f 0' is the problem.
       parseString "let f 0 = 0 in 123" `shouldBe` Left "Parse error at line 1, column 8"
