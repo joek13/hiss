@@ -1,12 +1,12 @@
 module Interpreter.TreeWalker (eval, HissValue) where
 
-import Control.Monad.State.Lazy (State, evalState, get, put)
+import Control.Monad.State.Lazy (State, evalState, get, put, zipWithM_)
 import Data.Map (Map, empty, insert, lookup)
-import Syntax.AST (BinOp (..), Exp (..), LetBinding (..), Name (..), getIdent, stripAnns)
+import Syntax.AST (BinOp (..), Exp (..), FunApp (..), LetBinding (..), Name (..), getIdent, stripAnns)
 
 data HissValue
   = Int Integer
-  | Func (Name ()) [Name ()] (Exp ())
+  | Func [Name ()] (Exp ())
   deriving (Eq, Show)
 
 type Environment = Map (Name ()) HissValue
@@ -46,7 +46,21 @@ eval' (ELetIn () lb valExp inExp) = do
       -- restore old environment
       put env
       return inVal
-    _ -> error "Function declarations are unimplemented!"
+    LetBinding () n args -> do
+      -- TODO collect names to create closures
+
+      -- create function object
+      let func = Func args valExp
+      -- bind name to function
+      env <- insertBinding n func
+
+      -- evaluate inExp in new environment
+      inVal <- eval' inExp
+
+      -- restore old environment
+      put env
+      return inVal
+eval' (EFunApp () funApp) = evalFunApp funApp
 eval' _ = error "Unimplemented!"
 
 evalBinOp :: BinOp -> HissValue -> HissValue -> HissValue
@@ -63,3 +77,19 @@ insertBinding name val = do
   let env' = insert name val env
   put env'
   return env
+
+evalFunApp :: FunApp () -> Hiss HissValue
+evalFunApp (FunApp () fun argExprs) = do
+  funVal <- eval' fun
+  case funVal of
+    (Func argNames body) -> do
+      argVals <- mapM eval' argExprs
+      env <- get
+      -- insert binding for each function argument
+      zipWithM_ insertBinding argNames argVals
+      -- evaluate function body
+      retVal <- eval' body
+      -- restore old environment
+      put env
+      return retVal
+    x -> error $ "Type error: " <> show x <> " is not a function"
