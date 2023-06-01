@@ -5,7 +5,7 @@ Hiss is a hobby functional programming language.
 - [x] Simple Haskell-like syntax
 - [x] First-class functions
 - [x] Simple tree-walk interpreter (see [src/Interpreter/TreeWalker.hs](src/Interpreter/TreeWalker.hs))
-- [ ] Lexical closures
+- [x] Lexical closures and partial function application
 - [ ] Semantic pass with type checking
 - [ ] Compiles to machine code
     - [ ] Lazy evaluation (maybe)
