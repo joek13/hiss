@@ -103,7 +103,7 @@ insertBinding_ :: Name () -> HissValue -> Hiss ()
 insertBinding_ name val = void (insertBinding name val)
 
 -- Merges an environment with the current environment and returns the old environment.
--- Prefers current bindings over new ones in case of duplicate names.
+-- Prefers new bindings over current ones in case of duplicate names.
 mergeEnv :: Environment -> Hiss Environment
 mergeEnv env' = do
   env <- get

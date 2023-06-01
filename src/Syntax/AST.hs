@@ -89,4 +89,4 @@ funAppMapAnn :: (a -> b) -> FunApp a -> FunApp b
 funAppMapAnn f (FunApp a fun args) = FunApp (f a) (mapAnn f fun) (map (mapAnn f) args)
 
 funAppCollectNames :: FunApp a -> Set (Name a)
-funAppCollectNames (FunApp _ fun args) = (collectNames fun) `Set.union` (foldl Set.union Set.empty (map collectNames args))
+funAppCollectNames (FunApp _ fun args) = collectNames fun `Set.union` foldl Set.union Set.empty (map collectNames args)
