@@ -11,6 +11,8 @@ data BinOp
   | Sub
   | Mult
   | Div
+  | Equals
+  | NotEquals
   | LessThan
   | LessEqual
   | GreaterThan

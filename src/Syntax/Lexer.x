@@ -30,6 +30,8 @@ tokens :-
 <0>       "*"                        { mkLexeme Star }
 <0>       "/"                        { mkLexeme Slash }
 <0>       "="                        { mkLexeme Equals }
+<0>       "=="                       { mkLexeme DblEquals }
+<0>       "!="                       { mkLexeme NotEquals }
 <0>       "<"                        { mkLexeme LessThan }
 <0>       ">"                        { mkLexeme GreaterThan }
 <0>       "<="                       { mkLexeme LessEqual }
@@ -57,6 +59,8 @@ data Token = EOF
            | Star
            | Slash
            | Equals
+           | DblEquals
+           | NotEquals
            | LessThan
            | LessEqual
            | GreaterThan

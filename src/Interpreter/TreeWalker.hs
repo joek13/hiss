@@ -110,12 +110,16 @@ evalBinOp op (Int a) (Int b) = case op of
   Sub -> Int (a - b)
   Mult -> Int (a * b)
   Div -> Int (a `div` b)
+  Equals -> Bool (a == b)
+  NotEquals -> Bool (a /= b)
   LessThan -> Bool (a < b)
   LessEqual -> Bool (a <= b)
   GreaterThan -> Bool (a > b)
   GreaterEqual -> Bool (a >= b)
   _ -> error $ "Type error: operator " <> show op <> " cannot be applied to arguments of type int,int"
 evalBinOp op (Bool a) (Bool b) = case op of
+  Equals -> Bool (a == b)
+  NotEquals -> Bool (a /= b)
   And -> Bool (a && b)
   Or -> Bool (a || b)
   _ -> error $ "Type error: operator " <> show op <> " cannot be applied to arguments of type bool,bool"

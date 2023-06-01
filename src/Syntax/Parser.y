@@ -16,6 +16,7 @@ import Data.Maybe (fromJust)
 -- associativity and operator precedence
 %right 'else'
 %right 'in' 
+%left '==' '!='
 %left '&&' '||'
 %nonassoc '<' '>' '<=' '>='
 %left '+' '-'
@@ -29,6 +30,8 @@ import Data.Maybe (fromJust)
     '*'                    { Lexeme{ tok = T.Star } }
     '/'                    { Lexeme{ tok = T.Slash } }
     '='                    { Lexeme{ tok = T.Equals } }
+    '=='                   { Lexeme{ tok = T.DblEquals }}
+    '!='                   { Lexeme{ tok = T.NotEquals }}
     '<'                    { Lexeme{ tok = T.LessThan } }
     '>'                    { Lexeme{ tok = T.GreaterThan } }
     '<='                   { Lexeme{ tok = T.LessEqual } }
@@ -60,6 +63,8 @@ exp1 : atom                                { $1 }
      | exp '/' exp                         { mkBinOpExp $1 Div $3 }
      | exp '+' exp                         { mkBinOpExp $1 Add $3 }
      | exp '-' exp                         { mkBinOpExp $1 Sub $3 }
+     | exp '==' exp                        { mkBinOpExp $1 Equals $3 }
+     | exp '!=' exp                        { mkBinOpExp $1 NotEquals $3 }
      | exp '<' exp                         { mkBinOpExp $1 LessThan $3 }
      | exp '>' exp                         { mkBinOpExp $1 GreaterThan $3 }
      | exp '<=' exp                        { mkBinOpExp $1 LessEqual $3 }
