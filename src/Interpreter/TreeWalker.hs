@@ -3,7 +3,7 @@ module Interpreter.TreeWalker (eval, HissValue) where
 import Control.Monad (void)
 import Control.Monad.State.Lazy (State, evalState, get, put, zipWithM_)
 import Data.Map.Strict (Map)
-import Data.Map.Strict qualified as Map (empty, insert, lookup, restrictKeys, union)
+import Data.Map.Strict qualified as Map (empty, fromList, insert, lookup, restrictKeys, union)
 import Data.Set ((\\))
 import Data.Set qualified as Set (fromList)
 import Syntax.AST (BinOp (..), Exp (..), FunApp (..), LetBinding (..), Name (..), collectNames, getIdent, stripAnns)
@@ -128,6 +128,13 @@ evalFunApp (FunApp () fun argExps) = do
           -- restore old environment
           put env
           return retVal
-        LT -> error "Partial function application is unimplemented!"
+        LT -> do
+          -- partial application: create a new closure
+          let nArgs = length argExps -- number of args provided
+          argVals <- mapM eval' argExps -- evaluate the provided args
+          let partialEnv = Map.fromList (zip argNames argVals) :: Environment
+          let captured' = partialEnv `Map.union` captured -- update captured environment with bindings for provided args
+          let argNames' = drop nArgs argNames -- drop provided args from resulting closure
+          return (Func captured' argNames' body)
         GT -> error $ "Type error: function expects " <> show (length argNames) <> " arguments, but " <> show (length argExps) <> " were provided."
     x -> error $ "Type error: " <> show x <> " is not a function"
