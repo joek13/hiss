@@ -2,6 +2,7 @@ module Interpreter.TreeWalker (eval, HissValue) where
 
 import Control.Monad (void)
 import Control.Monad.State.Lazy (State, evalState, get, put, zipWithM_)
+import Data.List (intercalate)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map (empty, fromList, insert, lookup, restrictKeys, union)
 import Data.Set ((\\))
@@ -14,7 +15,11 @@ data HissValue
       Environment -- captured environment (bindings of referenced names)
       [Name ()] -- argument names
       (Exp ()) -- function body
-  deriving (Eq, Show)
+  deriving (Eq)
+
+instance Show HissValue where
+  show (Int x) = show x
+  show (Func _ args _) = "(function of " <> intercalate "," (map getIdent args) <> ")"
 
 -- An Environment maps names to their value.
 type Environment = Map (Name ()) HissValue
