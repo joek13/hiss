@@ -1,4 +1,4 @@
-module Syntax.AST (Name (..), BinOp (..), LetBinding (..), Exp (..), FunApp (..), collectNames, getAnn, mapAnn, stripAnns, getIdent) where
+module Syntax.AST (Name (..), BinOp (..), UnaryOp (..), LetBinding (..), Exp (..), FunApp (..), collectNames, getAnn, mapAnn, stripAnns, getIdent) where
 
 import Data.Maybe (fromJust)
 import Data.Monoid (getFirst)
@@ -11,6 +11,16 @@ data BinOp
   | Sub
   | Mult
   | Div
+  | LessThan
+  | LessEqual
+  | GreaterThan
+  | GreaterEqual
+  | And
+  | Or
+  deriving (Eq, Show)
+
+data UnaryOp
+  = Not
   deriving (Eq, Show)
 
 -- AST expression.
@@ -18,8 +28,10 @@ data BinOp
 -- to annotate the syntax tree with, e.g., source program range information.
 data Exp a
   = EInt a Integer -- <int>
+  | EBool a Bool -- <bool>
   | EVar a (Name a) -- <var>
   | EFunApp a (FunApp a) -- <exp1> <exp2> (<exp3> <exp4> ...)
+  | EUnaryOp a UnaryOp (Exp a) -- <op> <exp1>
   | EBinOp a (Exp a) BinOp (Exp a) -- <exp1> <binop> <exp2>
   | ELetIn a (LetBinding a) (Exp a) (Exp a) -- let <binding> = <exp1> in <exp2>
   | EIf a (Exp a) (Exp a) (Exp a) -- if <exp1> then <exp2> else <exp3>
@@ -36,9 +48,11 @@ stripAnns = mapAnn (const ())
 
 -- Recursively applies f to each AST node's annotation.
 mapAnn :: (a -> b) -> Exp a -> Exp b
+mapAnn f (EBool a b) = EBool (f a) b
 mapAnn f (EInt a i) = EInt (f a) i
 mapAnn f (EVar a n) = EVar (f a) (nameMapAnn f n)
 mapAnn f (EFunApp a funApp) = EFunApp (f a) (funAppMapAnn f funApp)
+mapAnn f (EUnaryOp a op e1) = EUnaryOp (f a) op (mapAnn f e1)
 mapAnn f (EBinOp a e1 op e2) = EBinOp (f a) (mapAnn f e1) op (mapAnn f e2)
 mapAnn f (ELetIn a lb e1 e2) = ELetIn (f a) (letBindingMapAnn f lb) (mapAnn f e1) (mapAnn f e2)
 mapAnn f (EIf a e1 e2 e3) = EIf (f a) (mapAnn f e1) (mapAnn f e2) (mapAnn f e3)
@@ -46,9 +60,11 @@ mapAnn f (EParen a e1) = EParen (f a) (mapAnn f e1)
 
 -- Collects all Names referenced in an expression and its children.
 collectNames :: Exp a -> Set (Name a)
+collectNames (EBool _ _) = Set.empty
 collectNames (EInt _ _) = Set.empty
 collectNames (EVar _ n) = Set.singleton n
 collectNames (EFunApp _ funApp) = funAppCollectNames funApp
+collectNames (EUnaryOp _ _ e1) = collectNames e1
 collectNames (EBinOp _ e1 _ e2) = collectNames e1 `Set.union` collectNames e2
 collectNames (ELetIn _ _ e1 e2) = collectNames e1 `Set.union` collectNames e2
 collectNames (EIf _ e1 e2 e3) = collectNames e1 `Set.union` collectNames e2 `Set.union` collectNames e3

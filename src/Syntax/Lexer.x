@@ -30,11 +30,20 @@ tokens :-
 <0>       "*"                        { mkLexeme Star }
 <0>       "/"                        { mkLexeme Slash }
 <0>       "="                        { mkLexeme Equals }
+<0>       "<"                        { mkLexeme LessThan }
+<0>       ">"                        { mkLexeme GreaterThan }
+<0>       "<="                       { mkLexeme LessEqual }
+<0>       ">="                       { mkLexeme GreaterEqual }
+<0>       "&&"                       { mkLexeme And }
+<0>       "||"                       { mkLexeme Or }
+<0>       "!"                        { mkLexeme Not }
 <0>       "let"                      { mkLexeme Let }
 <0>       "in"                       { mkLexeme In }
 <0>       "if"                       { mkLexeme If }
 <0>       "then"                     { mkLexeme Then }
 <0>       "else"                     { mkLexeme Else }
+<0>       "true"                     { mkLexeme Syntax.Lexer.True }
+<0>       "false"                    { mkLexeme Syntax.Lexer.False }
 <0>       $digit+                    { mkLexeme Int }
 <0>       @id                        { mkLexeme Ident}
 
@@ -48,6 +57,15 @@ data Token = EOF
            | Star
            | Slash
            | Equals
+           | LessThan
+           | LessEqual
+           | GreaterThan
+           | GreaterEqual
+           | And
+           | Or
+           | Not
+           | True
+           | False
            | Let
            | In
            | If

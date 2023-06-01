@@ -38,6 +38,9 @@ spec = do
     it "successfully lexes nested block comments" $
       discardPosns (lexString "/* this comment is /* nested */ and that's okay */") `shouldBe` Just [(EOF, "")]
 
+    it "lexes booleans" $
+      discardPosns (lexString "true || false") `shouldBe` Just [(Syntax.Lexer.True, "true"), (Or, "||"), (Syntax.Lexer.False, "false"), (EOF, "")]
+
     it "successfully tracks token range" $
       let getPosns res = map rng <$> unwrapLexemes res
        in getPosns (lexString "ident1\n ident2")
