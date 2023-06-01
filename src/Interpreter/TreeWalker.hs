@@ -1,12 +1,19 @@
 module Interpreter.TreeWalker (eval, HissValue) where
 
+import Control.Monad (void)
 import Control.Monad.State.Lazy (State, evalState, get, put, zipWithM_)
-import Data.Map (Map, empty, insert, lookup)
-import Syntax.AST (BinOp (..), Exp (..), FunApp (..), LetBinding (..), Name (..), getIdent, stripAnns)
+import Data.Map.Strict (Map)
+import Data.Map.Strict qualified as Map (empty, insert, lookup, restrictKeys, union)
+import Data.Set ((\\))
+import Data.Set qualified as Set (fromList)
+import Syntax.AST (BinOp (..), Exp (..), FunApp (..), LetBinding (..), Name (..), collectNames, getIdent, stripAnns)
 
 data HissValue
   = Int Integer
-  | Func [Name ()] (Exp ())
+  | Func
+      Environment -- captured environment (bindings of referenced names)
+      [Name ()] -- argument names
+      (Exp ()) -- function body
   deriving (Eq, Show)
 
 -- An Environment maps names to their value.
@@ -17,7 +24,7 @@ type Hiss = State Environment
 
 -- Evaluates an AST.
 eval :: Exp a -> HissValue
-eval e = evalState (eval' e') empty
+eval e = evalState (eval' e') Map.empty
   where
     e' = stripAnns e
 
@@ -33,7 +40,7 @@ eval' (EParen () e1) = eval' e1
 eval' (EVar () n) = do
   -- looks up variable in current environment
   env <- get
-  case Data.Map.lookup n env of
+  case Map.lookup n env of
     Just val -> return val
     Nothing -> error $ "Name error: name " <> getIdent n <> " undefined in current environment"
 eval' (ELetIn () lb valExp inExp) = do
@@ -51,12 +58,16 @@ eval' (ELetIn () lb valExp inExp) = do
       return inVal
     -- function binding
     LetBinding () n args -> do
-      -- TODO collect names to create closures
+      -- names referenced inside the closure (minus the function arguments)
+      let capturedNames = collectNames valExp \\ Set.fromList args
 
-      -- create function object
-      let func = Func args valExp
-      -- bind name to function
-      env <- insertBinding n func
+      -- get captured values' associated bindings
+      env <- get
+      let capturedEnv = Map.restrictKeys env capturedNames
+
+      -- create and bind function object
+      let func = Func capturedEnv args valExp
+      insertBinding_ n func
 
       -- evaluate inExp in new environment
       inVal <- eval' inExp
@@ -83,21 +94,33 @@ evalBinOp op _ _ = error $ "Type error: operator " <> show op <> " can only be a
 insertBinding :: Name () -> HissValue -> Hiss Environment
 insertBinding name val = do
   env <- get
-  let env' = insert name val env
+  let env' = Map.insert name val env
   put env'
+  return env
+
+-- Binds 'name' to 'val' in current environment.
+insertBinding_ :: Name () -> HissValue -> Hiss ()
+insertBinding_ name val = void (insertBinding name val)
+
+-- Merges an environment with the current environment and returns the old environment.
+-- Prefers current bindings over new ones in case of duplicate names.
+mergeEnv :: Environment -> Hiss Environment
+mergeEnv env' = do
+  env <- get
+  put (env' `Map.union` env)
   return env
 
 evalFunApp :: FunApp () -> Hiss HissValue
 evalFunApp (FunApp () fun argExps) = do
   funVal <- eval' fun
   case funVal of
-    (Func argNames body) -> do
+    (Func captured argNames body) -> do
       case compare (length argExps) (length argNames) of
         EQ -> do
           -- all arguments present: apply the function
           -- evaluate arguments
           argVals <- mapM eval' argExps
-          env <- get
+          env <- mergeEnv captured
           -- insert binding for each function argument
           zipWithM_ insertBinding argNames argVals
           -- evaluate function body
