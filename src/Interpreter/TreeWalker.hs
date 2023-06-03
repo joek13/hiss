@@ -1,12 +1,14 @@
 module Interpreter.TreeWalker (eval, HissValue) where
 
 import Control.Monad (void)
+import Control.Monad.Except (ExceptT, runExceptT, throwError)
 import Control.Monad.State.Lazy (State, evalState, get, put, zipWithM_)
 import Data.List (intercalate)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map (empty, fromList, insert, lookup, restrictKeys, union)
 import Data.Set ((\\))
 import Data.Set qualified as Set (fromList)
+import Error (HissError (RuntimeError))
 import Syntax.AST (BinOp (..), Exp (..), FunApp (..), LetBinding (..), Name (..), UnaryOp (..), collectNames, getIdent, stripAnns)
 
 data HissValue
@@ -33,11 +35,11 @@ instance Show HissValue where
 type Environment = Map (Name ()) HissValue
 
 -- Hiss evaluation monad.
-type Hiss = State Environment
+type Hiss = ExceptT HissError (State Environment)
 
 -- Evaluates an AST.
-eval :: Exp a -> HissValue
-eval e = evalState (eval' e') Map.empty
+eval :: Exp a -> Either HissError HissValue
+eval e = evalState (runExceptT $ eval' e') Map.empty
   where
     e' = stripAnns e
 
@@ -47,19 +49,19 @@ eval' (EBool () b) = return (Bool b)
 eval' (EInt () x) = return (Int x)
 eval' (EUnaryOp () op e1) = do
   v1 <- eval' e1
-  return (evalUnaryOp op v1)
+  evalUnaryOp op v1
 eval' (EBinOp () e1 op e2) = do
   -- evaluates left then right
   v1 <- eval' e1
   v2 <- eval' e2
-  return (evalBinOp op v1 v2)
+  evalBinOp op v1 v2
 eval' (EParen () e1) = eval' e1
 eval' (EVar () n) = do
   -- looks up variable in current environment
   env <- get
   case Map.lookup n env of
     Just val -> return val
-    Nothing -> error $ "Name error: name " <> getIdent n <> " undefined in current environment"
+    Nothing -> throwError (RuntimeError $ "Name error: name " <> getIdent n <> " undefined in current environment")
 eval' (ELetIn () lb valExp inExp) = do
   case lb of
     -- variable binding
@@ -98,32 +100,32 @@ eval' (EIf () condExp thenExp elseExp) = do
   case condVal of
     Bool True -> eval' thenExp
     Bool False -> eval' elseExp
-    _ -> error "Type error: if-then-else condition must be a bool"
+    _ -> throwError (RuntimeError "Type error: if-then-else condition must be a bool")
 
-evalUnaryOp :: UnaryOp -> HissValue -> HissValue
-evalUnaryOp Not (Bool b) = Bool (not b)
-evalUnaryOp Not x = error $ "Type error: operator " <> show Not <> " cannot be applied to argument of type " <> showType x
+evalUnaryOp :: UnaryOp -> HissValue -> Hiss HissValue
+evalUnaryOp Not (Bool b) = pure $ Bool (not b)
+evalUnaryOp Not x = throwError (RuntimeError $ "Type error: operator " <> show Not <> " cannot be applied to argument of type " <> showType x)
 
-evalBinOp :: BinOp -> HissValue -> HissValue -> HissValue
+evalBinOp :: BinOp -> HissValue -> HissValue -> Hiss HissValue
 evalBinOp op (Int a) (Int b) = case op of
-  Add -> Int (a + b)
-  Sub -> Int (a - b)
-  Mult -> Int (a * b)
-  Div -> Int (a `div` b)
-  Equals -> Bool (a == b)
-  NotEquals -> Bool (a /= b)
-  LessThan -> Bool (a < b)
-  LessEqual -> Bool (a <= b)
-  GreaterThan -> Bool (a > b)
-  GreaterEqual -> Bool (a >= b)
-  _ -> error $ "Type error: operator " <> show op <> " cannot be applied to arguments of type int,int"
+  Add -> pure $ Int (a + b)
+  Sub -> pure $ Int (a - b)
+  Mult -> pure $ Int (a * b)
+  Div -> pure $ Int (a `div` b)
+  Equals -> pure $ Bool (a == b)
+  NotEquals -> pure $ Bool (a /= b)
+  LessThan -> pure $ Bool (a < b)
+  LessEqual -> pure $ Bool (a <= b)
+  GreaterThan -> pure $ Bool (a > b)
+  GreaterEqual -> pure $ Bool (a >= b)
+  _ -> throwError (RuntimeError $ "Type error: operator " <> show op <> " cannot be applied to arguments of type int,int")
 evalBinOp op (Bool a) (Bool b) = case op of
-  Equals -> Bool (a == b)
-  NotEquals -> Bool (a /= b)
-  And -> Bool (a && b)
-  Or -> Bool (a || b)
-  _ -> error $ "Type error: operator " <> show op <> " cannot be applied to arguments of type bool,bool"
-evalBinOp op x y = error $ "Type error: operator " <> show op <> " cannot be applied to arguments of type " <> showType x <> "," <> showType y
+  Equals -> pure $ Bool (a == b)
+  NotEquals -> pure $ Bool (a /= b)
+  And -> pure $ Bool (a && b)
+  Or -> pure $ Bool (a || b)
+  _ -> throwError (RuntimeError $ "Type error: operator " <> show op <> " cannot be applied to arguments of type bool,bool")
+evalBinOp op x y = throwError (RuntimeError $ "Type error: operator " <> show op <> " cannot be applied to arguments of type " <> showType x <> "," <> showType y)
 
 -- Binds 'name' to 'val' in current environment and returns the old environment.
 insertBinding :: Name () -> HissValue -> Hiss Environment
@@ -171,5 +173,5 @@ evalFunApp (FunApp () fun argExps) = do
           let captured' = partialEnv `Map.union` captured -- update captured environment with bindings for provided args
           let argNames' = drop nArgs argNames -- drop provided args from resulting closure
           return (Func captured' argNames' body)
-        GT -> error $ "Type error: function expects " <> show (length argNames) <> " arguments, but " <> show (length argExps) <> " were provided."
-    x -> error $ "Type error: " <> show x <> " is not a function"
+        GT -> throwError (RuntimeError $ "Type error: function expects " <> show (length argNames) <> " arguments, but " <> show (length argExps) <> " were provided.")
+    x -> throwError (RuntimeError $ "Type error: " <> show x <> " is not a function")
