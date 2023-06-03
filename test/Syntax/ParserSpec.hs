@@ -4,13 +4,10 @@ import Syntax.AST (BinOp (..), Exp (..), FunApp (..), LetBinding (..), Name (..)
 import Syntax.Lexer (AlexPosn (AlexPn), Range (..), runAlex)
 import Syntax.Parser (parseHiss)
 import Test.Hspec (Spec, describe, it, shouldBe)
+import Util (fromRight)
 
 parseString :: String -> Either String (Exp Range)
 parseString inp = runAlex inp parseHiss
-
-fromRight :: Either a b -> b
-fromRight (Right b) = b
-fromRight (Left _) = error "Called fromRight on Left"
 
 spec :: Spec
 spec = do
