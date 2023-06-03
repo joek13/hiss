@@ -20,13 +20,13 @@ spec :: Spec
 spec = do
   describe "mergeRange" $ do
     it "merges disjoint ranges correctly" $
-      (Range (AlexPn 0 1 1) (AlexPn 6 1 7))
-        `mergeRange` (Range (AlexPn 8 2 2) (AlexPn 14 2 8))
-        `shouldBe` (Range (AlexPn 0 1 1) (AlexPn 14 2 8))
+      Range (AlexPn 0 1 1) (AlexPn 6 1 7)
+        `mergeRange` Range (AlexPn 8 2 2) (AlexPn 14 2 8)
+        `shouldBe` Range (AlexPn 0 1 1) (AlexPn 14 2 8)
     it "merges contained ranges correctly" $
-      (Range (AlexPn 0 1 1) (AlexPn 6 1 7))
-        `mergeRange` (Range (AlexPn 2 1 3) (AlexPn 5 1 6))
-        `shouldBe` (Range (AlexPn 0 1 1) (AlexPn 6 1 7))
+      Range (AlexPn 0 1 1) (AlexPn 6 1 7)
+        `mergeRange` Range (AlexPn 2 1 3) (AlexPn 5 1 6)
+        `shouldBe` Range (AlexPn 0 1 1) (AlexPn 6 1 7)
 
   describe "lexString" $ do
     it "fails to lex opened block comment" $
