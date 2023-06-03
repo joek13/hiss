@@ -25,8 +25,11 @@ source-repository head
 
 library
   exposed-modules:
+      Error
       Interpreter.TreeWalker
       Lib
+      Semantic.Names
+      Syntax
       Syntax.AST
       Syntax.Lexer
       Syntax.Parser
@@ -67,9 +70,11 @@ test-suite hiss-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Semantic.NamesSpec
       Syntax.ASTSpec
       Syntax.LexerSpec
       Syntax.ParserSpec
+      Util
       Paths_hiss
   hs-source-dirs:
       test
@@ -81,6 +86,7 @@ test-suite hiss-test
       hspec-discover:hspec-discover
   build-depends:
       base >=4.7 && <5
+    , containers
     , hiss
     , hspec
   default-language: Haskell2010

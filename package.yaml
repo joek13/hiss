@@ -70,5 +70,6 @@ tests:
     dependencies:
     - hiss
     - hspec
+    - containers
     build-tools:
     - hspec-discover
