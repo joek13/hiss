@@ -13,12 +13,12 @@ Hiss is a hobby functional programming language.
 ## Sample
 A simple Hiss program (syntax is subject to change):
 ```
-// computes factorial of n
-let fac n = if n 
-            then n * fac (n-1)
-            else 1
+// computes nth fibonacci number
+let fib n = if n <= 1
+            then 1
+            else fib (n-1) + fib (n-2)
 in
-    fac 6 // prints 720
+    fib 10 // prints 89
 ```
 ## Commands
 ```bash
