@@ -9,7 +9,8 @@ import Data.Map.Strict qualified as Map (empty, fromList, insert, lookup, restri
 import Data.Set ((\\))
 import Data.Set qualified as Set (fromList)
 import Error (HissError (RuntimeError))
-import Syntax.AST (BinOp (..), Exp (..), FunApp (..), LetBinding (..), Name (..), UnaryOp (..), collectNames, getIdent, stripAnns)
+import Syntax.AST (BinOp (..), Exp (..), FunApp (..), LetBinding (..), Name (..), UnaryOp (..), getIdent, stripAnns)
+import Semantic.Names (collectNames)
 
 data HissValue
   = Int Integer
