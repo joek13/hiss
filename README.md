@@ -6,20 +6,32 @@ Hiss is a hobby functional programming language.
 - [x] First-class functions
 - [x] Simple tree-walk interpreter (see [src/Interpreter/TreeWalker.hs](src/Interpreter/TreeWalker.hs))
 - [x] Lexical closures and partial function application
-- [ ] Semantic pass with type checking
+- [ ] Semantic pass
+    - [x] Name checker
+    - [ ] Type checker
 - [ ] Compiles to machine code
     - [ ] Lazy evaluation (maybe)
 
 ## Sample
-A simple Hiss program (syntax is subject to change):
+A simple Hiss program, [collatz.hiss](samples/collatz.hiss):
 ```
-// computes nth fibonacci number
-let fib n = if n <= 1
-            then 1
-            else fib (n-1) + fib (n-2)
+// computes k mod n
+let mod n k = if k < n
+              then k
+              else mod n (k-n)
 in
-    fib 10 // prints 89
+// partial function application
+let mod2 = mod 2 in
+// computes total stopping time of n
+let collatz n steps = if n == 1
+                      then steps
+                      else if mod2 n == 0
+                           then collatz (n/2) (steps + 1)
+                           else collatz (3*n + 1) (steps + 1)
+in
+    collatz 27 0 // should output 111
 ```
+(syntax is subject to change)
 ## Commands
 ```bash
 # build the project
