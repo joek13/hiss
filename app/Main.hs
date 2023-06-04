@@ -11,7 +11,7 @@ runProg inp = do
   -- syntax
   ast <- parseString inp
   -- semantic
-  ast' <- checkNames ast
+  ast' <- checkNames ast -- TODO: support multiple errors
   -- evaluate
   Interpreter.eval ast'
 
