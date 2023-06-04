@@ -4,6 +4,7 @@ data HissError
   = SyntaxError String
   | SemanticError String
   | RuntimeError String
+  deriving (Eq, Show)
 
 showErr :: HissError -> String
 showErr (SyntaxError msg) = "Syntax error: " <> msg
