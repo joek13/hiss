@@ -49,7 +49,7 @@ library:
   - happy
 
 executables:
-  hiss-exe:
+  hissc:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
@@ -58,6 +58,7 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - hiss
+    - optparse-applicative
 
 tests:
   hiss-test:

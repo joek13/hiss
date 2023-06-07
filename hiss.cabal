@@ -51,9 +51,11 @@ library
     , mtl
   default-language: Haskell2010
 
-executable hiss-exe
+executable hissc
   main-is: Main.hs
   other-modules:
+      Command
+      Command.Eval
       Paths_hiss
   hs-source-dirs:
       app
@@ -64,6 +66,7 @@ executable hiss-exe
   build-depends:
       base >=4.7 && <5
     , hiss
+    , optparse-applicative
   default-language: Haskell2010
 
 test-suite hiss-test

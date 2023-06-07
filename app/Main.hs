@@ -1,23 +1,27 @@
 module Main (main) where
 
-import Error (HissError, showErr)
-import Interpreter.TreeWalker (HissValue)
-import Interpreter.TreeWalker qualified as Interpreter (eval)
-import Semantic.Names (checkNames)
-import Syntax (parseString)
+import Command (Command (Eval))
+import Command.Eval (doEval, evalOptsParser)
+import Options.Applicative (Parser, ParserInfo, command, execParser, fullDesc, header, helper, info, progDesc, subparser, (<**>))
 
-runProg :: String -> Either HissError HissValue
-runProg inp = do
-  -- syntax
-  ast <- parseString inp
-  -- semantic
-  ast' <- checkNames ast -- TODO: support multiple errors
-  -- evaluate
-  Interpreter.eval ast'
+-- Global hissc options.
+newtype Options = Options {optCommand :: Command}
+
+optsParser' :: Parser Options
+optsParser' =
+  Options
+    <$> subparser
+      ( command "eval" evalOptsParser
+      )
+
+optsParser :: ParserInfo Options
+optsParser =
+  info
+    (optsParser' <**> helper)
+    (fullDesc <> progDesc "Compiler for the Hiss programming language." <> header "hissc - Hiss compiler")
 
 main :: IO ()
 main = do
-  inp <- getContents
-  case runProg inp of
-    Left err -> print $ showErr err
-    Right out -> print out
+  opts <- execParser optsParser
+  case optCommand opts of
+    Eval evalOpts -> doEval evalOpts
