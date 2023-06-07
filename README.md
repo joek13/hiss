@@ -35,9 +35,9 @@ in
 ## Commands
 ```bash
 # build the project
-stack build 
-# run the project (cli in progress)
-stack run
+stack build
+# interpret a hiss program
+stack run -- eval samples/collatz.hiss
 # run unit tests
 stack test
 ```
