@@ -52,13 +52,12 @@ import Data.Maybe (fromJust)
 
 %%
 
-exp  : exp1                                { $1 }
+-- a Hiss expression
+exp  : atom                                { $1 }
      | '!' atom                            { mkUnaryOpExp $1 $2 }
      | funApp                              { mkFunAppExp $1 }
      | 'let' letBinding '=' exp 'in' exp   { mkLetInExp $2 $4 $6}
      | 'if' exp 'then' exp 'else' exp      { mkIfExp $2 $4 $6 }
-
-exp1 : atom                                { $1 }
      | exp '*' exp                         { mkBinOpExp $1 Mult $3 }
      | exp '/' exp                         { mkBinOpExp $1 Div $3 }
      | exp '+' exp                         { mkBinOpExp $1 Add $3 }
