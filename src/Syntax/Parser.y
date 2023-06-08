@@ -83,11 +83,11 @@ atom : 'true'                              { mkBoolExp $1 }
 letBinding : ident                         { mkLetBinding $1 }
            | letBinding ident              { letBindingAppendArg $1 $2 }
 
--- using atom here ensures two things:
--- function application binds more tightly than any binary operators (e.g., f a + f b = (f a) + (f b) )
--- function application is left associative (e.g., f a b c = f applied to a,b,c )
-funApp : atom atom %shift                  { mkFunApp $1 $2 }
-       | funApp atom %shift                { funAppAppendArg $1 $2 }
+funApp : atom '(' funArgs ')'              { mkFunApp $1 $3 }
+
+funArgs : {- empty -}                      { [] :: [Exp Range] }
+        | exp                              { [$1] }
+        | funArgs ',' exp                  { $3 : $1 }
 
 {
 mkUnaryOpExp :: Lexeme -> Exp Range -> Exp Range
@@ -139,14 +139,9 @@ letBindingAppendArg (LetBinding r1 name names) Lexeme { tok=T.Ident, val=newName
 letBindingAppendArg _ _ = error "Compiler bug: letBindingAppendArg called with a non-identifier lexeme"
 
 -- Creates a function application with a function name and one argument
-mkFunApp :: Exp Range -> Exp Range -> FunApp Range
-mkFunApp e1 e2 = FunApp r e1 [e2]
-    where r = (getAnn e1) `mergeRange` (getAnn e2)
-
--- Appends an argument to an existing function application
-funAppAppendArg :: FunApp Range -> Exp Range -> FunApp Range
-funAppAppendArg (FunApp r1 fun args) e1 = FunApp r' fun (args ++ [e1])
-    where r' = r1 `mergeRange` (getAnn e1)
+mkFunApp :: Exp Range -> [Exp Range] -> FunApp Range
+mkFunApp e1 es = FunApp r e1 es
+    where r = (getAnn e1) {-`mergeRange` (foldr1 mergeRange (map getAnn es))-}
 
 parseError :: Lexeme -> Alex a
 parseError _ = do
