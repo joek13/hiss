@@ -25,6 +25,7 @@ import Data.Maybe (fromJust)
 %token
     '('                    { Lexeme{ tok = T.LParen } }
     ')'                    { Lexeme{ tok = T.RParen } }
+    ','                    { Lexeme{ tok = T.Comma } }
     '+'                    { Lexeme{ tok = T.Plus } }
     '-'                    { Lexeme{ tok = T.Minus } }
     '*'                    { Lexeme{ tok = T.Star } }

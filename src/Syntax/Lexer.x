@@ -25,6 +25,7 @@ tokens :-
 -- tokens
 <0>       \(                         { mkLexeme LParen }
 <0>       \)                         { mkLexeme RParen }
+<0>       ","                        { mkLexeme Comma }
 <0>       "+"                        { mkLexeme Plus }
 <0>       "-"                        { mkLexeme Minus }
 <0>       "*"                        { mkLexeme Star }
@@ -54,6 +55,7 @@ tokens :-
 data Token = EOF
            | LParen
            | RParen
+           | Comma
            | Plus
            | Minus
            | Star
