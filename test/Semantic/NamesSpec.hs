@@ -3,23 +3,23 @@ module Semantic.NamesSpec (spec) where
 import Data.Set qualified as Set (fromList)
 import Error (HissError (SemanticError))
 import Semantic.Names (checkNames, collectNames)
-import Syntax (parseString)
+import Syntax (parseExpression)
 import Syntax.AST (Exp, Name (..))
 import Syntax.Lexer (AlexPosn (..), Range (..))
 import Test.Hspec (Spec, describe, it, shouldBe)
 import Util (fromRight)
 
 exp1 :: Exp Range
-exp1 = fromRight $ parseString "x + y - z"
+exp1 = fromRight $ parseExpression "x + y - z"
 
 exp2 :: Exp Range
-exp2 = fromRight $ parseString "let f(x,y) = z in f(0)"
+exp2 = fromRight $ parseExpression "let f(x,y) = z in f(0)"
 
 exp3 :: Exp Range
-exp3 = fromRight $ parseString "let f(x,y) = x in f(0,0)"
+exp3 = fromRight $ parseExpression "let f(x,y) = x in f(0,0)"
 
 exp4 :: Exp Range
-exp4 = fromRight $ parseString "let f(x,y) = x in x"
+exp4 = fromRight $ parseExpression "let f(x,y) = x in x"
 
 spec :: Spec
 spec = do

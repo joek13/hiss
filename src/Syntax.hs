@@ -1,12 +1,12 @@
-module Syntax (parseString) where
+module Syntax (parseExpression) where
 
 import Error (HissError (SyntaxError))
 import Syntax.AST (Exp)
 import Syntax.Lexer (Range, runAlex)
-import Syntax.Parser (parseHiss)
+import Syntax.Parser (parseExp)
 
--- Wraps Lexer.parseHiss and returns HissError in case of an error.
-parseString :: String -> Either HissError (Exp Range)
-parseString inp = case runAlex inp parseHiss of
+-- Wraps Lexer.parseExp and returns HissError in case of failure
+parseExpression :: String -> Either HissError (Exp Range)
+parseExpression inp = case runAlex inp parseExp of
   Left msg -> Left (SyntaxError msg)
   Right ast -> Right ast

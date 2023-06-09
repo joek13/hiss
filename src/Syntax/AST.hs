@@ -1,8 +1,14 @@
-module Syntax.AST (Name (..), BinOp (..), UnaryOp (..), Binding (..), Exp (..), FunApp (..), getAnn, mapAnn, stripAnns, getIdent) where
+module Syntax.AST (Program, Decl (..), Name (..), BinOp (..), UnaryOp (..), Binding (..), Exp (..), FunApp (..), getAnn, mapAnn, stripAnns, getIdent) where
 
 import Data.Maybe (fromJust)
 import Data.Monoid (getFirst)
 import Data.Ord (comparing)
+
+-- a Hiss program is given by zero or more top-level declarations.
+type Program a = [Decl a]
+
+-- Top-level declaration
+data Decl a = Decl a (Binding a) (Exp a)
 
 data BinOp
   = Add
