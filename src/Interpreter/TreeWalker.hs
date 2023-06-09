@@ -1,4 +1,4 @@
-module Interpreter.TreeWalker (eval, HissValue) where
+module Interpreter.TreeWalker (eval, HissValue (..)) where
 
 import Control.Monad (void)
 import Control.Monad.Except (ExceptT, runExceptT, throwError)
@@ -9,8 +9,8 @@ import Data.Map.Strict qualified as Map (empty, fromList, insert, lookup, restri
 import Data.Set ((\\))
 import Data.Set qualified as Set (fromList)
 import Error (HissError (RuntimeError))
-import Syntax.AST (BinOp (..), Exp (..), FunApp (..), Binding (..), Name (..), UnaryOp (..), getIdent, stripAnns)
 import Semantic.Names (collectNames)
+import Syntax.AST (BinOp (..), Binding (..), Exp (..), FunApp (..), Name (..), UnaryOp (..), getIdent, stripAnns)
 
 data HissValue
   = Int Integer

@@ -9,6 +9,7 @@ type Program a = [Decl a]
 
 -- Top-level declaration
 data Decl a = Decl a (Binding a) (Exp a)
+  deriving (Eq, Show, Foldable)
 
 data BinOp
   = Add

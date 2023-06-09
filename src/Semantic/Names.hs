@@ -1,11 +1,11 @@
-module Semantic.Names (collectNames, expCheckNames) where
+module Semantic.Names (collectNames, expCheckNames, progCheckNames) where
 
 import Control.Monad.State (MonadState (get, put), State, evalState)
 import Data.Maybe (maybeToList)
 import Data.Set (Set)
-import Data.Set qualified as Set (empty, insert, member, singleton, union)
+import Data.Set qualified as Set (empty, fromList, insert, member, singleton, union)
 import Error (HissError (SemanticError))
-import Syntax.AST (Binding (..), Exp (..), FunApp (..), Name (..))
+import Syntax.AST (Binding (..), Decl (..), Exp (..), FunApp (..), Name (..), Program)
 import Syntax.Lexer (AlexPosn (..), Range (..))
 
 -- Collects all Names referenced in an expression and its children.
@@ -24,15 +24,36 @@ collectNames (EParen _ e1) = collectNames e1
 funAppCollectNames :: FunApp a -> Set (Name a)
 funAppCollectNames (FunApp _ fun args) = collectNames fun `Set.union` foldl Set.union Set.empty (map collectNames args)
 
+-- Checks all the names in a program and makes sure they are defined in cnotext.
+progCheckNames :: Program Range -> Either HissError (Program Range)
+progCheckNames prog =
+  -- given prog's top level declarations,
+  -- checks the body of each decl for undeclared names.
+  case concatMap (checkDecl declNames) prog of
+    [] -> Right prog -- no errors: return program unchanged
+    msg : _ -> Left (SemanticError msg) -- errors: return first one
+  where
+    -- names of all top-level declarations
+    -- (they are considered declared everywhere)
+    declNames = Set.fromList $ map getName prog
+    -- gets the name bound by a declaration
+    getName (Decl _ (ValBinding _ n) _) = n
+    getName (Decl _ (FuncBinding _ n _) _) = n
+    -- checks names of a given declaration given already-declared names `decl`
+    checkDecl decl (Decl _ (ValBinding _ _) body) = expCheckNames' decl body
+    checkDecl decl (Decl _ (FuncBinding _ _ args) body) = expCheckNames' (decl `Set.union` args') body
+      where
+        args' = Set.fromList args
+
 -- Traverses an expression and make sure each name is defined in its context.
 expCheckNames :: Exp Range -> Either HissError (Exp Range)
-expCheckNames = expCheckNames' Set.empty
+expCheckNames ast = case expCheckNames' Set.empty ast of
+  [] -> Right ast -- no errors: return exp unchanged
+  msg : _ -> Left (SemanticError msg) -- errors: return first one
 
-expCheckNames' :: NameSet -> Exp Range -> Either HissError (Exp Range)
+expCheckNames' :: NameSet -> Exp Range -> [String]
 -- uses State monad to track currently declared names as we traverse the AST.
-expCheckNames' defined ast = case evalState (checkNames' ast) defined of
-  [] -> Right ast -- no errors: return AST unchanged
-  msg : _ -> Left (SemanticError msg) -- errors: return first error
+expCheckNames' defined ast = evalState (checkNames' ast) defined
 
 -- Set of Names annotated with Range information.
 type NameSet = Set (Name Range)
