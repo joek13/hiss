@@ -2,7 +2,7 @@
 module Syntax.Parser ( parseHiss ) where
 import Syntax.Lexer ( Lexeme(..), Range(..), AlexPosn(..), Alex, mergeRange, alexError, alexGetInput, alexMonadScan )
 import qualified Syntax.Lexer as T (Token (..))
-import Syntax.AST( Exp(..), Name(..), UnaryOp(..), BinOp(..), LetBinding(..), FunApp(..), getAnn )
+import Syntax.AST( Exp(..), Name(..), UnaryOp(..), BinOp(..), Binding(..), FunApp(..), getAnn )
 import Data.Maybe (fromJust)
 }
 
@@ -25,6 +25,7 @@ import Data.Maybe (fromJust)
 %token
     '('                    { Lexeme{ tok = T.LParen } }
     ')'                    { Lexeme{ tok = T.RParen } }
+    ','                    { Lexeme{ tok = T.Comma } }
     '+'                    { Lexeme{ tok = T.Plus } }
     '-'                    { Lexeme{ tok = T.Minus } }
     '*'                    { Lexeme{ tok = T.Star } }
@@ -56,7 +57,7 @@ import Data.Maybe (fromJust)
 exp  : atom                                { $1 }
      | '!' atom                            { mkUnaryOpExp $1 $2 }
      | funApp                              { mkFunAppExp $1 }
-     | 'let' letBinding '=' exp 'in' exp   { mkLetInExp $2 $4 $6}
+     | 'let' binding '=' exp 'in' exp      { mkLetInExp $2 $4 $6}
      | 'if' exp 'then' exp 'else' exp      { mkIfExp $2 $4 $6 }
      | exp '*' exp                         { mkBinOpExp $1 Mult $3 }
      | exp '/' exp                         { mkBinOpExp $1 Div $3 }
@@ -78,22 +79,26 @@ atom : 'true'                              { mkBoolExp $1 }
      | ident                               { mkVarExp $1 }
      | '(' exp ')'                         { mkParenExp $1 $2 $3 }
 
--- a let binding is simply one or more names
-letBinding : ident                         { mkLetBinding $1 }
-           | letBinding ident              { letBindingAppendArg $1 $2 }
+-- either a value binding (just a name) or a func binding (a func name and zero or more arg names)
+binding : ident                            { mkValBinding $1 }
+        | ident '(' funBindingArgs ')'     { mkFuncBinding $1 $3 }
 
--- using atom here ensures two things:
--- function application binds more tightly than any binary operators (e.g., f a + f b = (f a) + (f b) )
--- function application is left associative (e.g., f a b c = f applied to a,b,c )
-funApp : atom atom %shift                  { mkFunApp $1 $2 }
-       | funApp atom %shift                { funAppAppendArg $1 $2 }
+funBindingArgs : {- empty -}               { [] :: [Lexeme] }
+               | ident                     { [$1] }
+               | funBindingArgs ',' ident  { $3 : $1 }
+
+funApp : atom '(' funArgs ')'              { mkFunApp $1 $3 }
+
+funArgs : {- empty -}                      { [] :: [Exp Range] }
+        | exp                              { [$1] }
+        | funArgs ',' exp                  { $3 : $1 }
 
 {
 mkUnaryOpExp :: Lexeme -> Exp Range -> Exp Range
 mkUnaryOpExp Lexeme{ tok=T.Not, rng=r1 } e1 = EUnaryOp r1 Not e1
     where r = r1 `mergeRange` (getAnn e1)
 
-mkLetInExp :: LetBinding Range -> Exp Range -> Exp Range -> Exp Range
+mkLetInExp :: Binding Range -> Exp Range -> Exp Range -> Exp Range
 mkLetInExp binding e1 e2 = ELetIn r binding e1 e2
     where r = (getAnn binding) `mergeRange` (getAnn e1) `mergeRange` (getAnn e2) 
 
@@ -125,27 +130,26 @@ mkParenExp :: Lexeme -> Exp Range -> Lexeme -> Exp Range
 mkParenExp Lexeme { rng = lRng } e1 Lexeme { rng = rRng } = EParen r (e1)
     where r = lRng `mergeRange` rRng
 
--- Creates a let binding with a name and no arguments.
-mkLetBinding :: Lexeme -> LetBinding Range
-mkLetBinding Lexeme { tok=T.Ident, val=name, rng=r } = LetBinding r (Name r name) []
-mkLetBinding _ = error "Compiler bug: mkLetBinding called with a non-identifier lexeme"
+-- Creates a value binding
+mkValBinding :: Lexeme -> Binding Range
+mkValBinding Lexeme { tok = T.Ident, val=name, rng=r } = ValBinding r (Name r name)
+mkLetBinding _ = error "Compiler bug: mkValBinding called with a non-identifier lexeme"
 
--- Appends an argument to an existing let binding.
-letBindingAppendArg :: LetBinding Range -> Lexeme -> LetBinding Range
-letBindingAppendArg (LetBinding r1 name names) Lexeme { tok=T.Ident, val=newName, rng=r2 }
-    = LetBinding r' name (names ++ [ Name r2 newName ])
-    where r' = r1 `mergeRange` r2
-letBindingAppendArg _ _ = error "Compiler bug: letBindingAppendArg called with a non-identifier lexeme"
+-- Converts an identifier to a Name.
+mkName :: Lexeme -> Name Range
+mkName Lexeme { tok=T.Ident, val=name, rng=r } = Name r name
+mkName _ = error "Compiler bug: mkName called with a non-identifier lexeme"
+
+-- Creates a function binding
+mkFuncBinding :: Lexeme -> [Lexeme] -> Binding Range
+mkFuncBinding Lexeme { tok = T.Ident, val=name, rng=r1 } argLexemes = FuncBinding r' (Name r1 name) (reverse args)
+    where args = map mkName argLexemes
+          r' = r1 `mergeRange` (foldl1 mergeRange (map getAnn args))
 
 -- Creates a function application with a function name and one argument
-mkFunApp :: Exp Range -> Exp Range -> FunApp Range
-mkFunApp e1 e2 = FunApp r e1 [e2]
-    where r = (getAnn e1) `mergeRange` (getAnn e2)
-
--- Appends an argument to an existing function application
-funAppAppendArg :: FunApp Range -> Exp Range -> FunApp Range
-funAppAppendArg (FunApp r1 fun args) e1 = FunApp r' fun (args ++ [e1])
-    where r' = r1 `mergeRange` (getAnn e1)
+mkFunApp :: Exp Range -> [Exp Range] -> FunApp Range
+mkFunApp e1 es = FunApp r e1 (reverse es)
+    where r = (getAnn e1) `mergeRange` (foldl1 mergeRange (map getAnn es))
 
 parseError :: Lexeme -> Alex a
 parseError _ = do

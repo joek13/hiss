@@ -1,6 +1,6 @@
 // computes nth fibonacci number recursively
-let fib n = if n <= 1 
-            then 1
-            else fib (n-1) + fib (n-2)
+let fib(n) = if n <= 1 
+             then 1
+             else fib(n-1) + fib(n-2)
 in
-    fib 13 // should output 377
+    fib(13) // should output 377

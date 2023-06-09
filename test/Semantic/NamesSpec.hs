@@ -13,13 +13,13 @@ exp1 :: Exp Range
 exp1 = fromRight $ parseString "x + y - z"
 
 exp2 :: Exp Range
-exp2 = fromRight $ parseString "let f x y = z in f 0"
+exp2 = fromRight $ parseString "let f(x,y) = z in f(0)"
 
 exp3 :: Exp Range
-exp3 = fromRight $ parseString "let f x y = x in f 0 0"
+exp3 = fromRight $ parseString "let f(x,y) = x in f(0,0)"
 
 exp4 :: Exp Range
-exp4 = fromRight $ parseString "let f x y = x in x"
+exp4 = fromRight $ parseString "let f(x,y) = x in x"
 
 spec :: Spec
 spec = do
@@ -32,4 +32,4 @@ spec = do
     it "allows use of declared names" $
       checkNames exp3 `shouldBe` Right exp3
     it "does not allow use of function arguments outside function" $
-      checkNames exp4 `shouldBe` Left (SemanticError "Use of undeclared name 'x' at line 1, column 18")
+      checkNames exp4 `shouldBe` Left (SemanticError "Use of undeclared name 'x' at line 1, column 19")

@@ -5,7 +5,7 @@ import Data.Maybe (maybeToList)
 import Data.Set (Set)
 import Data.Set qualified as Set (empty, insert, member, singleton, union)
 import Error (HissError (SemanticError))
-import Syntax.AST (Exp (..), FunApp (..), LetBinding (LetBinding), Name (..))
+import Syntax.AST (Exp (..), FunApp (..), Binding (..), Name (..))
 import Syntax.Lexer (AlexPosn (..), Range (..))
 
 -- Collects all Names referenced in an expression and its children.
@@ -53,8 +53,16 @@ checkNames' (EVar _ name) = maybeToList <$> checkName name
 checkNames' (EFunApp _ (FunApp _ fun args)) = concat <$> mapM checkNames' (fun : args)
 checkNames' (EUnaryOp _ _ e1) = checkNames' e1
 checkNames' (EBinOp _ e1 _ e2) = concat <$> mapM checkNames' [e1, e2]
-checkNames' (ELetIn _ (LetBinding _ name args) e1 e2) = do
-  -- let <name> <args> = <e1> in <e2>
+checkNames' (ELetIn _ (ValBinding _ name) e1 e2) = do
+  -- let <name> = <e1> in <e2>
+  -- name should be declared in e1 (e.g. recursive binding) and e2
+  declaredNames <- get
+  putName name 
+  errs <- mapM checkNames' [e1, e2]
+  put declaredNames
+  return $ concat errs
+checkNames' (ELetIn _ (FuncBinding _ name args) e1 e2) = do
+  -- let <name>(<args>) = <e1> in <e2>
   -- both name and args are declared in e1
   -- but only name is declared in e2
   declaredNames <- get
@@ -64,11 +72,11 @@ checkNames' (ELetIn _ (LetBinding _ name args) e1 e2) = do
   errs1 <- checkNames' e1
   put declaredNames -- restore previously declared names
   return $ errs1 ++ errs2
-  where
-    putName :: Name Range -> State NameSet ()
-    putName n = do
-      declaredNames <- get
-      put $ n `Set.insert` declaredNames
-      return ()
 checkNames' (EIf _ e1 e2 e3) = concat <$> mapM checkNames' [e1, e2, e3]
 checkNames' (EParen _ e1) = checkNames' e1
+
+putName :: Name Range -> State NameSet ()
+putName n = do
+  declaredNames <- get
+  put $ n `Set.insert` declaredNames
+  return ()
