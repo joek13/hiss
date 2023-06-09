@@ -16,20 +16,20 @@ Hiss is a hobby functional programming language.
 A simple Hiss program, [collatz.hiss](samples/collatz.hiss):
 ```
 // computes k mod n
-let mod n k = if k < n
+let mod(n,k) = if k < n
               then k
-              else mod n (k-n)
+              else mod (n,k-n)
 in
 // partial function application
-let mod2 = mod 2 in
+let mod2 = mod(2) in
 // computes total stopping time of n
-let collatz n steps = if n == 1
-                      then steps
-                      else if mod2 n == 0
-                           then collatz (n/2) (steps + 1)
-                           else collatz (3*n + 1) (steps + 1)
+let collatz(n,steps) = if n == 1
+                       then steps
+                       else if mod2(n) == 0
+                            then collatz(n/2, steps + 1)
+                            else collatz (3*n + 1, steps + 1)
 in
-    collatz 27 0 // should output 111
+    collatz(27,0) // should output 111
 ```
 (syntax is subject to change)
 ## Commands
