@@ -5,7 +5,7 @@ import Data.Maybe (maybeToList)
 import Data.Set (Set)
 import Data.Set qualified as Set (empty, fromList, insert, member, singleton, union)
 import Error (HissError (SemanticError))
-import Syntax.AST (Binding (..), Decl (..), Exp (..), FunApp (..), Name (..), Program)
+import Syntax.AST (Binding (..), Decl (..), Exp (..), FunApp (..), Name (..), Program, declGetName)
 import Syntax.Lexer (AlexPosn (..), Range (..))
 
 -- Collects all Names referenced in an expression and its children.
@@ -24,21 +24,28 @@ collectNames (EParen _ e1) = collectNames e1
 funAppCollectNames :: FunApp a -> Set (Name a)
 funAppCollectNames (FunApp _ fun args) = collectNames fun `Set.union` foldl Set.union Set.empty (map collectNames args)
 
+-- Collects top-level declared names in a program, ensuring that they are unique.
+-- Returns HissError if a duplicate is found.
+progCollectDeclNames :: Program Range -> Either HissError NameSet
+progCollectDeclNames prog = foldl f (Right Set.empty) (map declGetName prog)
+  where
+    f (Right names) name@(Name r s)
+      | name `Set.member` names = Left (SemanticError $ "Name '" <> s <> "' redeclared at line " <> show line <> ", column " <> show column)
+      | otherwise = Right (name `Set.insert` names)
+      where
+        Range _ (AlexPn _ line column) = r
+    f (Left err) _ = Left err
+
 -- Checks all the names in a program and makes sure they are defined in cnotext.
 progCheckNames :: Program Range -> Either HissError (Program Range)
-progCheckNames prog =
+progCheckNames prog = do
+  declNames <- progCollectDeclNames prog
   -- given prog's top level declarations,
   -- checks the body of each decl for undeclared names.
   case concatMap (checkDecl declNames) prog of
     [] -> Right prog -- no errors: return program unchanged
     msg : _ -> Left (SemanticError msg) -- errors: return first one
   where
-    -- names of all top-level declarations
-    -- (they are considered declared everywhere)
-    declNames = Set.fromList $ map getName prog
-    -- gets the name bound by a declaration
-    getName (Decl _ (ValBinding _ n) _) = n
-    getName (Decl _ (FuncBinding _ n _) _) = n
     -- checks names of a given declaration given already-declared names `decl`
     checkDecl decl (Decl _ (ValBinding _ _) body) = expCheckNames' decl body
     checkDecl decl (Decl _ (FuncBinding _ _ args) body) = expCheckNames' (decl `Set.union` args') body

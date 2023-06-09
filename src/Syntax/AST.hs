@@ -1,4 +1,4 @@
-module Syntax.AST (Program, Decl (..), Name (..), BinOp (..), UnaryOp (..), Binding (..), Exp (..), FunApp (..), getAnn, mapAnn, stripAnns, getIdent) where
+module Syntax.AST (Program, Decl (..), Name (..), BinOp (..), UnaryOp (..), Binding (..), Exp (..), FunApp (..), getAnn, mapAnn, stripAnns, getIdent, declGetName) where
 
 import Data.Maybe (fromJust)
 import Data.Monoid (getFirst)
@@ -10,6 +10,10 @@ type Program a = [Decl a]
 -- Top-level declaration
 data Decl a = Decl a (Binding a) (Exp a)
   deriving (Eq, Show, Foldable)
+
+-- Gets Name bound by a declaration.
+declGetName :: Decl a -> Name a
+declGetName (Decl _ b _) = bindingGetName b
 
 data BinOp
   = Add
@@ -94,6 +98,11 @@ data Binding a
 bindingMapAnn :: (a -> b) -> Binding a -> Binding b
 bindingMapAnn f (ValBinding a n) = ValBinding (f a) (nameMapAnn f n)
 bindingMapAnn f (FuncBinding a n args) = FuncBinding (f a) (nameMapAnn f n) (map (nameMapAnn f) args)
+
+-- Gets the bound name of a Binding.
+bindingGetName :: Binding a -> Name a
+bindingGetName (ValBinding _ n) = n
+bindingGetName (FuncBinding _ n _) = n
 
 data FunApp a = FunApp a (Exp a) [Exp a]
   deriving (Eq, Show, Foldable)

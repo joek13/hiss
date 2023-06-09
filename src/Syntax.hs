@@ -9,7 +9,12 @@ import Syntax.Parser (parseExp, parseProg)
 parseProgram :: String -> Either HissError (Program Range)
 parseProgram inp = case runAlex inp parseProg of
   Left msg -> Left (SyntaxError msg)
-  Right ast -> Right ast
+  Right ast ->
+    Right
+      ( reverse ast {- parser gives decls in reverse order, which is unimportant.
+                    but reversing them into source order gives better error messages
+                    in the case of, e.g., redeclaration errors -}
+      )
 
 -- Wraps Lexer.parseExp and returns HissError in case of failure
 parseExpression :: String -> Either HissError (Exp Range)

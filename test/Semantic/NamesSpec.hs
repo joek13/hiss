@@ -27,6 +27,12 @@ prog1 = fromRight $ parseProgram "x = y + 1 \n y = 1"
 prog2 :: Program Range
 prog2 = fromRight $ parseProgram "inc(x) = x + 1 \n main = x"
 
+prog3 :: Program Range
+prog3 = fromRight $ parseProgram "f(x) = x \n f(x) = x + 1"
+
+prog4 :: Program Range
+prog4 = fromRight $ parseProgram "x = 1 \n x = 2"
+
 spec :: Spec
 spec = do
   describe "collectNames" $ do
@@ -45,3 +51,7 @@ spec = do
       progCheckNames prog1 `shouldBe` Right prog1
     it "does not allow use of function arguments outside function" $ 
       progCheckNames prog2 `shouldBe` Left (SemanticError "Use of undeclared name 'x' at line 2, column 9")
+    it "emits error on redeclaration of function" $
+      progCheckNames prog3 `shouldBe` Left (SemanticError "Name 'f' redeclared at line 2, column 3")
+    it "emits error on redeclaration of value" $
+      progCheckNames prog4 `shouldBe` Left (SemanticError "Name 'x' redeclared at line 2, column 3")
