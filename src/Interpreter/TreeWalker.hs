@@ -9,7 +9,7 @@ import Data.Map.Strict qualified as Map (empty, fromList, insert, lookup, restri
 import Data.Set ((\\))
 import Data.Set qualified as Set (fromList)
 import Error (HissError (RuntimeError))
-import Syntax.AST (BinOp (..), Exp (..), FunApp (..), LetBinding (..), Name (..), UnaryOp (..), getIdent, stripAnns)
+import Syntax.AST (BinOp (..), Exp (..), FunApp (..), Binding (..), Name (..), UnaryOp (..), getIdent, stripAnns)
 import Semantic.Names (collectNames)
 
 data HissValue
@@ -63,10 +63,10 @@ eval' (EVar () n) = do
   case Map.lookup n env of
     Just val -> return val
     Nothing -> throwError (RuntimeError $ "Name error: name " <> getIdent n <> " undefined in current environment")
-eval' (ELetIn () lb valExp inExp) = do
-  case lb of
-    -- variable binding
-    LetBinding () n [] -> do
+eval' (ELetIn () b valExp inExp) = do
+  case b of
+    -- val binding
+    ValBinding () n -> do
       val <- eval' valExp -- compute value
       env <- insertBinding n val -- bind n to val
 
@@ -77,7 +77,7 @@ eval' (ELetIn () lb valExp inExp) = do
       put env
       return inVal
     -- function binding
-    LetBinding () n args -> do
+    FuncBinding () n args -> do
       -- names referenced inside the closure (minus the function arguments)
       let capturedNames = collectNames valExp \\ Set.fromList args
 

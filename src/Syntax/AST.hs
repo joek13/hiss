@@ -1,4 +1,4 @@
-module Syntax.AST (Name (..), BinOp (..), UnaryOp (..), LetBinding (..), Exp (..), FunApp (..), getAnn, mapAnn, stripAnns, getIdent) where
+module Syntax.AST (Name (..), BinOp (..), UnaryOp (..), Binding (..), Exp (..), FunApp (..), getAnn, mapAnn, stripAnns, getIdent) where
 
 import Data.Maybe (fromJust)
 import Data.Monoid (getFirst)
@@ -33,7 +33,7 @@ data Exp a
   | EFunApp a (FunApp a) -- <exp1> <exp2> (<exp3> <exp4> ...)
   | EUnaryOp a UnaryOp (Exp a) -- <op> <exp1>
   | EBinOp a (Exp a) BinOp (Exp a) -- <exp1> <binop> <exp2>
-  | ELetIn a (LetBinding a) (Exp a) (Exp a) -- let <binding> = <exp1> in <exp2>
+  | ELetIn a (Binding a) (Exp a) (Exp a) -- let <binding> = <exp1> in <exp2>
   | EIf a (Exp a) (Exp a) (Exp a) -- if <exp1> then <exp2> else <exp3>
   | EParen a (Exp a) -- (<exp1>)
   deriving (Eq, Show, Foldable)
@@ -54,7 +54,7 @@ mapAnn f (EVar a n) = EVar (f a) (nameMapAnn f n)
 mapAnn f (EFunApp a funApp) = EFunApp (f a) (funAppMapAnn f funApp)
 mapAnn f (EUnaryOp a op e1) = EUnaryOp (f a) op (mapAnn f e1)
 mapAnn f (EBinOp a e1 op e2) = EBinOp (f a) (mapAnn f e1) op (mapAnn f e2)
-mapAnn f (ELetIn a lb e1 e2) = ELetIn (f a) (letBindingMapAnn f lb) (mapAnn f e1) (mapAnn f e2)
+mapAnn f (ELetIn a lb e1 e2) = ELetIn (f a) (bindingMapAnn f lb) (mapAnn f e1) (mapAnn f e2)
 mapAnn f (EIf a e1 e2 e3) = EIf (f a) (mapAnn f e1) (mapAnn f e2) (mapAnn f e3)
 mapAnn f (EParen a e1) = EParen (f a) (mapAnn f e1)
 
@@ -77,14 +77,16 @@ instance Ord (Name a) where
 nameMapAnn :: (a -> b) -> Name a -> Name b
 nameMapAnn f (Name a n) = Name (f a) n
 
--- Let binding (e.g., `flip f x y`)
--- Given by a name, and, in the case of a function, one or more argument names.
-data LetBinding a = LetBinding a (Name a) [Name a]
+-- Variable binding, e.g., `let <binding> = <exp> in <exp>`
+data Binding a
+  = ValBinding a (Name a) -- Value bindings are just names. e.g., 'x' in 'let x = 5 in ...'
+  | FuncBinding a (Name a) [Name a] -- Function bindings are names with zero or more arguments. e.g., 'f(a,b)' in 'let f(a,b) = a + b in ...'
   deriving (Eq, Show, Foldable)
 
--- Recursively applies f to a LetBinding's annotation and the annotations of its Names.
-letBindingMapAnn :: (a -> b) -> LetBinding a -> LetBinding b
-letBindingMapAnn f (LetBinding a n args) = LetBinding (f a) (nameMapAnn f n) (map (nameMapAnn f) args)
+-- Recursively applies f to a Binding's annotation and the annotations of its Names.
+bindingMapAnn :: (a -> b) -> Binding a -> Binding b
+bindingMapAnn f (ValBinding a n) = ValBinding (f a) (nameMapAnn f n)
+bindingMapAnn f (FuncBinding a n args) = FuncBinding (f a) (nameMapAnn f n) (map (nameMapAnn f) args)
 
 data FunApp a = FunApp a (Exp a) [Exp a]
   deriving (Eq, Show, Foldable)
