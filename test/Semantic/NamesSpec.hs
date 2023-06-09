@@ -2,7 +2,7 @@ module Semantic.NamesSpec (spec) where
 
 import Data.Set qualified as Set (fromList)
 import Error (HissError (SemanticError))
-import Semantic.Names (checkNames, collectNames)
+import Semantic.Names (expCheckNames, collectNames)
 import Syntax (parseExpression)
 import Syntax.AST (Exp, Name (..))
 import Syntax.Lexer (AlexPosn (..), Range (..))
@@ -30,6 +30,6 @@ spec = do
       collectNames exp2 `shouldBe` Set.fromList [Name (Range (AlexPn 17 1 18) (AlexPn 18 1 19)) "f", Name (Range (AlexPn 12 1 13) (AlexPn 13 1 14)) "z"]
   describe "checkNames" $ do
     it "allows use of declared names" $
-      checkNames exp3 `shouldBe` Right exp3
+      expCheckNames exp3 `shouldBe` Right exp3
     it "does not allow use of function arguments outside function" $
-      checkNames exp4 `shouldBe` Left (SemanticError "Use of undeclared name 'x' at line 1, column 19")
+      expCheckNames exp4 `shouldBe` Left (SemanticError "Use of undeclared name 'x' at line 1, column 19")

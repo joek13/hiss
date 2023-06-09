@@ -1,11 +1,11 @@
-module Semantic.Names (collectNames, checkNames) where
+module Semantic.Names (collectNames, expCheckNames) where
 
 import Control.Monad.State (MonadState (get, put), State, evalState)
 import Data.Maybe (maybeToList)
 import Data.Set (Set)
 import Data.Set qualified as Set (empty, insert, member, singleton, union)
 import Error (HissError (SemanticError))
-import Syntax.AST (Exp (..), FunApp (..), Binding (..), Name (..))
+import Syntax.AST (Binding (..), Exp (..), FunApp (..), Name (..))
 import Syntax.Lexer (AlexPosn (..), Range (..))
 
 -- Collects all Names referenced in an expression and its children.
@@ -24,10 +24,13 @@ collectNames (EParen _ e1) = collectNames e1
 funAppCollectNames :: FunApp a -> Set (Name a)
 funAppCollectNames (FunApp _ fun args) = collectNames fun `Set.union` foldl Set.union Set.empty (map collectNames args)
 
--- Traverses AST and makes sure each name is defined in its context.
-checkNames :: Exp Range -> Either HissError (Exp Range)
+-- Traverses an expression and make sure each name is defined in its context.
+expCheckNames :: Exp Range -> Either HissError (Exp Range)
+expCheckNames = expCheckNames' Set.empty
+
+expCheckNames' :: NameSet -> Exp Range -> Either HissError (Exp Range)
 -- uses State monad to track currently declared names as we traverse the AST.
-checkNames ast = case evalState (checkNames' ast) Set.empty of
+expCheckNames' defined ast = case evalState (checkNames' ast) defined of
   [] -> Right ast -- no errors: return AST unchanged
   msg : _ -> Left (SemanticError msg) -- errors: return first error
 
@@ -57,7 +60,7 @@ checkNames' (ELetIn _ (ValBinding _ name) e1 e2) = do
   -- let <name> = <e1> in <e2>
   -- name should be declared in e1 (e.g. recursive binding) and e2
   declaredNames <- get
-  putName name 
+  putName name
   errs <- mapM checkNames' [e1, e2]
   put declaredNames
   return $ concat errs
