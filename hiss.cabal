@@ -28,6 +28,7 @@ library
       Error
       Interpreter.TreeWalker
       Lib
+      Semantic.Entrypoint
       Semantic.Names
       Syntax
       Syntax.AST
@@ -73,6 +74,7 @@ test-suite hiss-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Semantic.EntrypointSpec
       Semantic.NamesSpec
       Syntax.ASTSpec
       Syntax.LexerSpec
