@@ -58,6 +58,7 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - hiss
+    - containers
     - optparse-applicative
 
 tests:

@@ -1,4 +1,4 @@
-module Interpreter.TreeWalker (interp, eval, baseEnv, HissValue (..), Environment) where
+module Interpreter.TreeWalker (interp, eval, baseEnv, procDecl, HissValue (..), Environment) where
 
 import Control.Monad (foldM, void)
 import Control.Monad.Except (ExceptT, runExceptT, throwError)
@@ -39,24 +39,29 @@ type Environment = Map (Name ()) HissValue
 -- Hiss evaluation monad.
 type Hiss = ExceptT HissError (State Environment)
 
+-- | Updates environmen with a single declaration.
+procDecl :: Environment -> Decl a -> Either HissError Environment
+procDecl env decl = procDecl' env (declStripAnns decl)
+
+procDecl' :: Environment -> Decl () -> Either HissError Environment
+-- processes a declaration
+procDecl' env (Decl _ (ValBinding _ n) e) = do
+  v <- eval env e
+  return $ Map.insert n v env
+procDecl' env (Decl _ (FuncBinding _ n args) e) = do
+  {-
+      top-level functions don't need to capture anything:
+      global bindings cannot be shadowed so they are valid
+      in any environment
+  -}
+  let v = Func Map.empty args e
+  return $ Map.insert n v env
+
 -- | Constructs base environment containing a program's top-level bindings.
 baseEnv :: Program a -> Either HissError Environment
 baseEnv prog = do
   -- process declarations from top to bottom
-  foldM procDecl Map.empty (map declStripAnns prog)
-  where
-    -- processes a declaration
-    procDecl env (Decl _ (ValBinding _ n) e) = do
-      v <- eval env e
-      return $ Map.insert n v env
-    procDecl env (Decl _ (FuncBinding _ n args) e) = do
-      {-
-         top-level functions don't need to capture anything:
-         global bindings cannot be shadowed so they are valid
-         in any environment
-      -}
-      let v = Func Map.empty args e
-      return $ Map.insert n v env
+  foldM procDecl' Map.empty (map declStripAnns prog)
 
 interp :: Program a -> Either HissError HissValue
 interp prog = do

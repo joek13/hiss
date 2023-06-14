@@ -4,10 +4,10 @@ import Command (Command (Repl), ReplOptions (..))
 import Data.List (intercalate)
 import Data.Map.Strict (assocs)
 import Error (HissError, showErr)
-import Interpreter.TreeWalker (Environment, HissValue, baseEnv, eval)
+import Interpreter.TreeWalker (Environment, HissValue, baseEnv, eval, procDecl)
 import Options.Applicative (Parser, ParserInfo, argument, help, helper, info, metavar, progDesc, str, (<**>))
 import Semantic.Names (progCheckNames)
-import Syntax (parseExpression, parseProgram)
+import Syntax (parseDeclOrExp, parseExpression, parseProgram)
 import Syntax.AST (getIdent)
 import System.IO (hFlush, stdout)
 
@@ -20,10 +20,13 @@ replOptsParser = info (parser <**> helper) (progDesc "Load a Hiss program and st
 loadProg :: String -> Either HissError Environment
 loadProg src = parseProgram src >>= progCheckNames >>= baseEnv
 
-parseAndEval :: Environment -> String -> Either HissError HissValue
-parseAndEval env expr = do
-  ast <- parseExpression expr
-  eval env ast
+printEnv :: Environment -> IO ()
+printEnv env = do
+  putStr "{"
+  putStr $ intercalate ", " (map showBinding (assocs env))
+  putStrLn "}"
+  where
+    showBinding (n, v) = getIdent n <> ": " <> show v
 
 doRepl' :: Environment -> IO ()
 doRepl' env = do
@@ -39,29 +42,40 @@ doRepl' env = do
       putStrLn "See you next time!"
     ":e" -> do
       -- show current environment
-      putStr "{"
-      putStr $ intercalate ", " (map showBinding (assocs env))
-      putStrLn "}"
+      printEnv env
       doRepl' env
-      where
-        showBinding (n, v) = getIdent n <> ": " <> show v
     ":h" -> do
       -- show help message
       putStrLn "== hiss repl =="
       putStrLn ""
-      putStrLn "Enter an expression to evaluate or one of the following commands:"
+      putStrLn "Enter a declaration, an expression, or one of the following commands:"
       putStrLn "  :h - show this message"
       putStrLn "  :e - show current environment"
       putStrLn "  :q - quit"
       putStrLn ""
       doRepl' env
-    _ -> case parseAndEval env expr of
-      -- evaluate expression
-      Right val -> do
-        print val
-        doRepl' env
+    _ -> case parseDeclOrExp expr of
+      Right (Right exprAst) ->
+        -- evaluate expression
+        case eval env exprAst of
+          Right val -> do
+            print val
+            doRepl' env
+          Left err -> do
+            putStrLn (showErr err)
+            doRepl' env
+      Right (Left decl) ->
+        -- process decl
+        case procDecl env decl of
+          Right env' -> do
+            -- repl in modified environment
+            printEnv env'
+            doRepl' env'
+          Left err -> do
+            putStrLn (showErr err)
+            doRepl' env
       Left err -> do
-        print $ showErr err
+        putStrLn (showErr err)
         doRepl' env
 
 doRepl :: ReplOptions -> IO ()
@@ -72,4 +86,4 @@ doRepl opts = do
     Right env -> do
       putStrLn $ "Loaded file " <> fileName
       doRepl' env
-    Left err -> print $ showErr err
+    Left err -> putStrLn (showErr err)

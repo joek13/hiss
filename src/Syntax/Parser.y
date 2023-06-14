@@ -1,5 +1,5 @@
 {
-module Syntax.Parser ( parseExp, parseProg ) where
+module Syntax.Parser ( parseExp, parseProg, parseDecl ) where
 import Syntax.Lexer ( Lexeme(..), Range(..), AlexPosn(..), Alex, mergeRange, alexError, alexGetInput, alexMonadScan )
 import qualified Syntax.Lexer as T (Token (..))
 import Syntax.AST( Decl(..), Exp(..), Name(..), UnaryOp(..), BinOp(..), Binding(..), FunApp(..), getAnn )
@@ -8,6 +8,7 @@ import Data.Maybe (fromJust)
 
 %name parseExp exp
 %name parseProg prog
+%name parseDecl decl
 %tokentype { Lexeme } 
 %error { parseError }
 %monad { Alex } { >>= } { pure }
