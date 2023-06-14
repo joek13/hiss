@@ -1,14 +1,12 @@
 module Command.Eval (evalOptsParser, doEval, doEval') where
 
 import Command (Command (Eval), EvalOptions (..))
-import Debug.Trace (trace)
 import Error (HissError, showErr)
 import Interpreter.TreeWalker (HissValue, interp)
 import Options.Applicative (Parser, ParserInfo, argument, help, helper, info, metavar, progDesc, str, (<**>))
 import Semantic.Entrypoint (checkEntrypoint)
 import Semantic.Names (progCheckNames)
 import Syntax (parseProgram)
-import Syntax.AST (getAnn)
 
 parser :: Parser Command
 parser = Eval . EvalOptions <$> argument str (metavar "FILE" <> help "Source Hiss program")
