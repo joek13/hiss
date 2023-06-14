@@ -5,7 +5,7 @@ import Data.Maybe (maybeToList)
 import Data.Set (Set)
 import Data.Set qualified as Set (empty, fromList, insert, member, singleton, union)
 import Error (HissError (SemanticError))
-import Syntax.AST (Binding (..), Decl (..), Exp (..), FunApp (..), Name (..), Program, declGetName)
+import Syntax.AST (Binding (..), Decl (..), Exp (..), FunApp (..), Name (..), Program, declGetName, getAnn, getIdent)
 import Syntax.Lexer (AlexPosn (..), Range (..))
 
 -- Collects all Names referenced in an expression and its children.
@@ -26,7 +26,7 @@ funAppCollectNames (FunApp _ fun args) = collectNames fun `Set.union` foldl Set.
 
 -- Collects top-level declared names in a program, ensuring that they are unique.
 -- Returns HissError if a duplicate is found.
-progCollectDeclNames :: Program Range -> Either HissError NameSet
+progCollectDeclNames :: Program Range -> Either HissError (Set (Name Range))
 progCollectDeclNames prog = foldl f (Right Set.empty) (map declGetName prog)
   where
     f (Right names) name@(Name r s)
@@ -39,22 +39,22 @@ progCollectDeclNames prog = foldl f (Right Set.empty) (map declGetName prog)
 -- Checks all the names in a program and makes sure they are defined in cnotext.
 progCheckNames :: Program Range -> Either HissError (Program Range)
 progCheckNames prog = do
-  declNames <- progCollectDeclNames prog
+  globals <- progCollectDeclNames prog
   -- given prog's top level declarations,
   -- checks the body of each decl for undeclared names.
-  case concatMap (checkDecl declNames) prog of
+  case concatMap (checkDecl (globals, globals)) prog of
     [] -> Right prog -- no errors: return program unchanged
     msg : _ -> Left (SemanticError msg) -- errors: return first one
   where
-    -- checks names of a given declaration given already-declared names `decl`
+    -- checks name of a given declaration given (globals, already-declared names)
     checkDecl decl (Decl _ (ValBinding _ _) body) = expCheckNames' decl body
-    checkDecl decl (Decl _ (FuncBinding _ _ args) body) = expCheckNames' (decl `Set.union` args') body
+    checkDecl (globals, _) (Decl _ (FuncBinding _ _ args) body) = expCheckNames' (globals, globals `Set.union` args') body
       where
         args' = Set.fromList args
 
 -- Traverses an expression and make sure each name is defined in its context.
 expCheckNames :: Exp Range -> Either HissError (Exp Range)
-expCheckNames ast = case expCheckNames' Set.empty ast of
+expCheckNames ast = case expCheckNames' (Set.empty, Set.empty) ast of
   [] -> Right ast -- no errors: return exp unchanged
   msg : _ -> Left (SemanticError msg) -- errors: return first one
 
@@ -62,13 +62,13 @@ expCheckNames' :: NameSet -> Exp Range -> [String]
 -- uses State monad to track currently declared names as we traverse the AST.
 expCheckNames' defined ast = evalState (checkNames' ast) defined
 
--- Set of Names annotated with Range information.
-type NameSet = Set (Name Range)
+-- (globals, defined)
+type NameSet = (Set (Name Range), Set (Name Range))
 
 -- Checks if name is declared in current scope.
 checkName :: Name Range -> State NameSet (Maybe String)
 checkName name@(Name r str) = do
-  declaredNames <- get
+  (_, declaredNames) <- get
   if name `Set.member` declaredNames
     then return Nothing
     else return $ Just $ "Use of undeclared name '" <> str <> "' at line " <> show line <> ", column " <> show column
@@ -86,28 +86,44 @@ checkNames' (EUnaryOp _ _ e1) = checkNames' e1
 checkNames' (EBinOp _ e1 _ e2) = concat <$> mapM checkNames' [e1, e2]
 checkNames' (ELetIn _ (ValBinding _ name) e1 e2) = do
   -- let <name> = <e1> in <e2>
-  -- name should be declared in e1 (e.g. recursive binding) and e2
-  declaredNames <- get
+  (globals, declared) <- get
+  -- check e1 (without new binding)
+  errs1 <- checkNames' e1
+  -- are we shadowing a global?
+  errs0 <- checkDeclShadowsGlobal name
+  -- insert new binding
   putName name
-  errs <- mapM checkNames' [e1, e2]
-  put declaredNames
-  return $ concat errs
+  -- check e2 (with new binding)
+  errs2 <- checkNames' e2
+  -- restore old environment
+  put (globals, declared)
+  return $ errs0 ++ errs1 ++ errs2
 checkNames' (ELetIn _ (FuncBinding _ name args) e1 e2) = do
   -- let <name>(<args>) = <e1> in <e2>
   -- both name and args are declared in e1
   -- but only name is declared in e2
-  declaredNames <- get
+  (globals, declared) <- get
+  errs0 <- checkDeclShadowsGlobal name
   putName name -- mark name as declared
   errs2 <- checkNames' e2
   mapM_ putName args -- mark args as declared
   errs1 <- checkNames' e1
-  put declaredNames -- restore previously declared names
-  return $ errs1 ++ errs2
+  put (globals, declared) -- restore previously declared names
+  return $ errs0 ++ errs1 ++ errs2
 checkNames' (EIf _ e1 e2 e3) = concat <$> mapM checkNames' [e1, e2, e3]
 checkNames' (EParen _ e1) = checkNames' e1
 
+checkDeclShadowsGlobal :: Name Range -> State NameSet [String]
+checkDeclShadowsGlobal name = do
+  (globals, _) <- get
+  if name `Set.member` globals
+    then
+      let Range _ (AlexPn _ line column) = getAnn name
+       in return ["Let binding of '" <> getIdent name <> "' at line " <> show line <> ", column " <> show column <> " shadows global binding"]
+    else return []
+
 putName :: Name Range -> State NameSet ()
 putName n = do
-  declaredNames <- get
-  put $ n `Set.insert` declaredNames
+  (globals, declaredNames) <- get
+  put (globals, n `Set.insert` declaredNames)
   return ()
