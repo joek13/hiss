@@ -40,18 +40,26 @@ type Hiss = ExceptT HissError (State Environment)
 
 interp :: Program a -> Either HissError HissValue
 interp prog = do
+  -- process declarations from top to bottom
   env <- foldM procDecl Map.empty (map declStripAnns prog)
 
+  -- lookup and evaluate main function
   case Name () "main" `Map.lookup` env of
     Just (Func _ [] body) -> eval env body
     Just (Func _ args _) -> Left (RuntimeError $ "Type error: function 'main' must have zero arguments, not " <> (show . length) args)
     Just x -> Left (RuntimeError $ "Type error: 'main' must be declared as function, not " <> showType x)
     Nothing -> Left (RuntimeError "Name error: missing function 'main'")
   where
+    -- processes a declaration
     procDecl env (Decl _ (ValBinding _ n) e) = do
       v <- eval env e
       return $ Map.insert n v env
     procDecl env (Decl _ (FuncBinding _ n args) e) = do
+      {-
+         top-level functions don't need to capture anything:
+         global bindings cannot be shadowed so they are valid
+         in any environment
+      -}
       let v = Func Map.empty args e
       return $ Map.insert n v env
 
