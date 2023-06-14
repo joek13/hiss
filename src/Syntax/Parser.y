@@ -159,12 +159,14 @@ mkName _ = error "Compiler bug: mkName called with a non-identifier lexeme"
 mkFuncBinding :: Lexeme -> [Lexeme] -> Binding Range
 mkFuncBinding Lexeme { tok = T.Ident, val=name, rng=r1 } argLexemes = FuncBinding r' (Name r1 name) (reverse args)
     where args = map mkName argLexemes
-          r' = r1 `mergeRange` (foldl1 mergeRange (map getAnn args))
+          r' | length args == 0 = r1
+             | otherwise        = r1 `mergeRange` (foldl1 mergeRange (map getAnn args))
 
 -- Creates a function application with a function name and one argument
 mkFunApp :: Exp Range -> [Exp Range] -> FunApp Range
 mkFunApp e1 es = FunApp r e1 (reverse es)
-    where r = (getAnn e1) `mergeRange` (foldl1 mergeRange (map getAnn es))
+    where r | length es == 0 = getAnn e1
+            | otherwise      = (getAnn e1) `mergeRange` (foldl1 mergeRange (map getAnn es))
 
 parseError :: Lexeme -> Alex a
 parseError _ = do
