@@ -1,4 +1,4 @@
-module Syntax.AST (Program, Decl (..), Name (..), BinOp (..), UnaryOp (..), Binding (..), Exp (..), FunApp (..), getAnn, mapAnn, stripAnns, getIdent, declGetName) where
+module Syntax.AST (Program, Decl (..), Name (..), BinOp (..), UnaryOp (..), Binding (..), Exp (..), FunApp (..), getAnn, mapAnn, stripAnns, getIdent, declGetName, declMapAnn, declStripAnns) where
 
 import Data.Maybe (fromJust)
 import Data.Monoid (getFirst)
@@ -14,6 +14,12 @@ data Decl a = Decl a (Binding a) (Exp a)
 -- Gets Name bound by a declaration.
 declGetName :: Decl a -> Name a
 declGetName (Decl _ b _) = bindingGetName b
+
+declMapAnn :: (a -> b) -> Decl a -> Decl b
+declMapAnn f (Decl a b e) = Decl (f a) (bindingMapAnn f b) (mapAnn f e)
+
+declStripAnns :: Decl a -> Decl ()
+declStripAnns = declMapAnn (const ())
 
 data BinOp
   = Add

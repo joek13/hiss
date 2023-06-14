@@ -1,9 +1,8 @@
-module Command.Eval (evalOptsParser, doEval) where
+module Command.Eval (evalOptsParser, doEval, doEval') where
 
 import Command (Command (Eval), EvalOptions (..))
 import Error (HissError, showErr)
-import Interpreter.TreeWalker (HissValue, eval)
-import qualified Interpreter.TreeWalker as I (HissValue (Bool))
+import Interpreter.TreeWalker (HissValue, interp)
 import Options.Applicative (Parser, ParserInfo, argument, help, helper, info, metavar, progDesc, str, (<**>))
 import Semantic.Names (progCheckNames)
 import Syntax (parseProgram)
@@ -20,8 +19,8 @@ doEval' source = do
   ast <- parseProgram source
   -- check names
   ast' <- progCheckNames ast
-
-  Right (I.Bool True) -- TODO: actually eval!!
+  -- interpret
+  interp ast'
 
 doEval :: EvalOptions -> IO ()
 doEval opts = do
