@@ -26,7 +26,7 @@ doEval' source = do
 
 doEval :: EvalOptions -> IO ()
 doEval opts = do
-  let fileName = optSourceFile opts
+  let fileName = evalSourceFile opts
   source <- readFile fileName
   case doEval' source of
     Right value -> print value

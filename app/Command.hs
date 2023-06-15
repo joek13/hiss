@@ -1,7 +1,12 @@
-module Command (EvalOptions (..), Command (..)) where
+module Command (EvalOptions (..), ReplOptions (..), Command (..)) where
 
 -- Eval command options.
-newtype EvalOptions = EvalOptions {optSourceFile :: String}
+newtype EvalOptions = EvalOptions {evalSourceFile :: String}
+
+-- Repl command options.
+newtype ReplOptions = ReplOptions {replSourceFile :: String}
 
 -- Command union.
-newtype Command = Eval EvalOptions
+data Command
+  = Eval EvalOptions
+  | Repl ReplOptions
