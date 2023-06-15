@@ -1,12 +1,13 @@
 {
-module Syntax.Parser ( parseHiss ) where
+module Syntax.Parser ( parseExp, parseProg ) where
 import Syntax.Lexer ( Lexeme(..), Range(..), AlexPosn(..), Alex, mergeRange, alexError, alexGetInput, alexMonadScan )
 import qualified Syntax.Lexer as T (Token (..))
-import Syntax.AST( Exp(..), Name(..), UnaryOp(..), BinOp(..), Binding(..), FunApp(..), getAnn )
+import Syntax.AST( Decl(..), Exp(..), Name(..), UnaryOp(..), BinOp(..), Binding(..), FunApp(..), getAnn )
 import Data.Maybe (fromJust)
 }
 
-%name parseHiss
+%name parseExp exp
+%name parseProg prog
 %tokentype { Lexeme } 
 %error { parseError }
 %monad { Alex } { >>= } { pure }
@@ -52,6 +53,16 @@ import Data.Maybe (fromJust)
 
 
 %%
+-- a Hiss program consists of zero or more declarations
+prog : {- empty -}                         { [] }
+     | decls                               { $1 }
+
+-- one or more declarations
+decls : decl                               { [$1] }
+      | decls decl                         { $2:$1 }
+
+-- a top-level declaration
+decl : binding '=' exp                     { mkDecl $1 $3 }
 
 -- a Hiss expression
 exp  : atom                                { $1 }
@@ -94,6 +105,10 @@ funArgs : {- empty -}                      { [] :: [Exp Range] }
         | funArgs ',' exp                  { $3 : $1 }
 
 {
+mkDecl :: Binding Range -> Exp Range -> Decl Range
+mkDecl b e1 = Decl r b e1
+    where r = (getAnn b) `mergeRange` (getAnn e1)
+
 mkUnaryOpExp :: Lexeme -> Exp Range -> Exp Range
 mkUnaryOpExp Lexeme{ tok=T.Not, rng=r1 } e1 = EUnaryOp r1 Not e1
     where r = r1 `mergeRange` (getAnn e1)
@@ -144,12 +159,14 @@ mkName _ = error "Compiler bug: mkName called with a non-identifier lexeme"
 mkFuncBinding :: Lexeme -> [Lexeme] -> Binding Range
 mkFuncBinding Lexeme { tok = T.Ident, val=name, rng=r1 } argLexemes = FuncBinding r' (Name r1 name) (reverse args)
     where args = map mkName argLexemes
-          r' = r1 `mergeRange` (foldl1 mergeRange (map getAnn args))
+          r' | length args == 0 = r1
+             | otherwise        = r1 `mergeRange` (foldl1 mergeRange (map getAnn args))
 
 -- Creates a function application with a function name and one argument
 mkFunApp :: Exp Range -> [Exp Range] -> FunApp Range
 mkFunApp e1 es = FunApp r e1 (reverse es)
-    where r = (getAnn e1) `mergeRange` (foldl1 mergeRange (map getAnn es))
+    where r | length es == 0 = getAnn e1
+            | otherwise      = (getAnn e1) `mergeRange` (foldl1 mergeRange (map getAnn es))
 
 parseError :: Lexeme -> Alex a
 parseError _ = do

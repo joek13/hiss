@@ -1,26 +1,24 @@
 module Syntax.ParserSpec (spec) where
 
+import Error (HissError (..))
+import Syntax (parseExpression)
 import Syntax.AST (BinOp (..), Binding (..), Exp (..), FunApp (..), Name (..), getAnn, stripAnns)
-import Syntax.Lexer (AlexPosn (AlexPn), Range (..), runAlex)
-import Syntax.Parser (parseHiss)
+import Syntax.Lexer (AlexPosn (AlexPn), Range (..))
 import Test.Hspec (Spec, describe, it, shouldBe)
 import Util (fromRight)
 
-parseString :: String -> Either String (Exp Range)
-parseString inp = runAlex inp parseHiss
-
 spec :: Spec
 spec = do
-  describe "parseHiss" $ do
-    it "parses a simple program" $
-      stripAnns (fromRight $ parseString "let x = 4 in x * x")
+  describe "parseExpression" $ do
+    it "parses a simple expression" $
+      stripAnns (fromRight $ parseExpression "let x = 4 in x * x")
         `shouldBe` ELetIn
           ()
           (ValBinding () (Name () "x"))
           (EInt () 4)
           (EBinOp () (EVar () (Name () "x")) Mult (EVar () (Name () "x")))
     it "respects operator precedence for comparisons and boolean operators" $
-      stripAnns (fromRight $ parseString "a < b && c >= d || e <= f")
+      stripAnns (fromRight $ parseExpression "a < b && c >= d || e <= f")
         `shouldBe` EBinOp
           ()
           ( EBinOp
@@ -33,7 +31,7 @@ spec = do
           (EBinOp () (EVar () (Name () "e")) LessEqual (EVar () (Name () "f")))
 
     it "respects operator precedence for add/sub/mult/div" $
-      stripAnns (fromRight $ parseString "a * b / c + d - e")
+      stripAnns (fromRight $ parseExpression "a * b / c + d - e")
         `shouldBe` EBinOp -- i.e., (((a*b)/c)+d)-e
           ()
           ( EBinOp
@@ -50,14 +48,14 @@ spec = do
           Sub
           (EVar () (Name () "e"))
     it "respects operator precedence for let...in and addition" $
-      stripAnns (fromRight $ parseString "let a = 0 in a + 3")
+      stripAnns (fromRight $ parseExpression "let a = 0 in a + 3")
         `shouldBe` ELetIn -- i.e., let a = 0 in (a+3)
           ()
           (ValBinding () (Name () "a"))
           (EInt () 0)
           (EBinOp () (EVar () (Name () "a")) Add (EInt () 3))
     it "correctly parses chained let-in expressions" $
-      stripAnns (fromRight $ parseString "let a = 0 in let b = 1 in a+b")
+      stripAnns (fromRight $ parseExpression "let a = 0 in let b = 1 in a+b")
         `shouldBe` ELetIn -- i.e., let a = 0 in (let b = 1 in a+b)
           ()
           (ValBinding () (Name () "a"))
@@ -70,21 +68,21 @@ spec = do
           )
     it "parses a simple function application" $
       -- note: this test was more critical when we used Haskell-style function application syntax (e.g., "f x" instead of "f(x)")
-      stripAnns (fromRight $ parseString "f(0,1,2)")
+      stripAnns (fromRight $ parseExpression "f(0,1,2)")
         `shouldBe` EFunApp
           ()
           (FunApp () (EVar () (Name () "f")) [EInt () 0, EInt () 1, EInt () 2])
     it "respects precedence of function application over multiplication" $
       -- note: this test was more critical when we used Haskell-style function application syntax (e.g., "f x" instead of "f(x)")
-      stripAnns (fromRight $ parseString "f(a) * f(b)")
+      stripAnns (fromRight $ parseExpression "f(a) * f(b)")
         `shouldBe` EBinOp
           ()
           (EFunApp () (FunApp () (EVar () (Name () "f")) [EVar () (Name () "a")]))
           Mult
           (EFunApp () (FunApp () (EVar () (Name () "f")) [EVar () (Name () "b")]))
     it "correctly tracks range of compound expressions" $
-      getAnn (fromRight $ parseString "(if a then b else c)")
+      getAnn (fromRight $ parseExpression "(if a then b else c)")
         `shouldBe` Range (AlexPn 0 1 1) (AlexPn 20 1 21)
     it "fails to parse a simple invalid program" $
       -- can only have names in a let binding. 'f 0' is the problem.
-      parseString "let f(0) = 0 in 123" `shouldBe` Left "Parse error at line 1, column 8"
+      parseExpression "let f(0) = 0 in 123" `shouldBe` Left (SyntaxError "Parse error at line 1, column 8")

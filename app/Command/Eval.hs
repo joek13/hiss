@@ -1,11 +1,12 @@
-module Command.Eval (evalOptsParser, doEval) where
+module Command.Eval (evalOptsParser, doEval, doEval') where
 
 import Command (Command (Eval), EvalOptions (..))
 import Error (HissError, showErr)
-import Interpreter.TreeWalker (HissValue, eval)
+import Interpreter.TreeWalker (HissValue, interp)
 import Options.Applicative (Parser, ParserInfo, argument, help, helper, info, metavar, progDesc, str, (<**>))
-import Semantic.Names (checkNames)
-import Syntax (parseString)
+import Semantic.Entrypoint (checkEntrypoint)
+import Semantic.Names (progCheckNames)
+import Syntax (parseProgram)
 
 parser :: Parser Command
 parser = Eval . EvalOptions <$> argument str (metavar "FILE" <> help "Source Hiss program")
@@ -15,14 +16,13 @@ evalOptsParser = info (parser <**> helper) (progDesc "Evaluate a Hiss program")
 
 doEval' :: String -> Either HissError HissValue
 doEval' source = do
-  -- lex/parse input
-  ast <- parseString source
-  -- check names
-  ast' <- checkNames ast
-  -- interpret program
-  value <- eval ast'
+  ast <-
+    parseProgram source -- parse/lex program
+      >>= progCheckNames -- check names
+      >>= checkEntrypoint -- check main func
 
-  Right value
+  -- interpret the program
+  interp ast
 
 doEval :: EvalOptions -> IO ()
 doEval opts = do
