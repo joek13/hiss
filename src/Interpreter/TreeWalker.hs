@@ -1,6 +1,6 @@
 -- | Experimental tree-walk interpreter.
 --   Not currently well-tested, but useful for playing around while we develop the backend.
-module Interpreter.TreeWalker (interp, eval, baseEnv, procDecl, HissValue (..), Environment) where
+module Interpreter.TreeWalker (interp, eval, globalEnv, insertDecl, HissValue (..), Environment) where
 
 import Control.Monad (foldM, void)
 import Control.Monad.Except (ExceptT, runExceptT, throwError)
@@ -14,16 +14,25 @@ import Error (HissError (RuntimeError))
 import Semantic.Names (collectNames)
 import Syntax.AST (BinOp (..), Binding (..), Decl (..), Expr (..), Name (..), Program, UnaryOp (..), getIdent, progDecls, stripAnns)
 
+-- | Hiss runtime value.
 data HissValue
-  = Int Integer
-  | Bool Bool
-  | Func
-      Environment -- captured environment (bindings of referenced names)
-      (Name ()) -- function name
-      [Name ()] -- argument names
-      (Expr ()) -- function body
+  = -- | Integer value
+    Int Integer
+  | -- | Boolean value
+    Bool Bool
+  | -- | Function value (closure).
+    Func
+      Environment
+      -- ^ closure's captured environment
+      (Name ())
+      -- ^ function name
+      [Name ()]
+      -- ^ argument names
+      (Expr ())
+      -- ^ function body
   deriving (Eq)
 
+-- | Shows the type of a HissValue.
 showType :: HissValue -> String
 showType (Int _) = "int"
 showType (Bool _) = "bool"
@@ -36,39 +45,34 @@ instance Show HissValue where
   show (Func _ n [] _) = "(function '" <> getIdent n <> "' of ())"
   show (Func _ n args _) = "(function '" <> getIdent n <> "' of " <> intercalate "," (map getIdent args) <> ")"
 
--- An Environment maps names to their value.
+-- | Table mapping Names to HissValues.
 type Environment = Map (Name ()) HissValue
 
--- Hiss evaluation monad.
+-- | Hiss evaluation monad.
 type Hiss = ExceptT HissError (State Environment)
 
--- | Updates environmen with a single declaration.
-procDecl :: Environment -> Decl a -> Either HissError Environment
-procDecl env decl = procDecl' env (stripAnns decl)
-
-procDecl' :: Environment -> Decl () -> Either HissError Environment
--- processes a declaration
-procDecl' env (Decl _ (ValBinding _ n) e) = do
-  v <- eval env e
-  return $ Map.insert n v env
-procDecl' env (Decl _ (FuncBinding _ n args) e) = do
+-- | Updates environment with a new Decl.
+insertDecl :: Environment -> Decl () -> Either HissError Environment
+insertDecl env (Decl _ (ValBinding _ name) body) = do
+  value <- eval env body -- evaluate RHS in current env
+  return $ Map.insert name value env -- update env with new binding
+insertDecl env (Decl _ (FuncBinding _ name args) body) = do
   {-
-      top-level functions don't need to capture anything:
-      global bindings cannot be shadowed so they are valid
-      in any environment
+    note: top level functions do not capture any vars, since they can only reference globals
+    we avoid scope confusion by banning shadowing of global variables
   -}
-  let v = Func Map.empty n args e
-  return $ Map.insert n v env
+  let func = Func Map.empty name args body
+  return $ Map.insert name func env
 
--- | Constructs base environment containing a program's top-level bindings.
-baseEnv :: Program a -> Either HissError Environment
-baseEnv prog = do
-  -- process declarations from top to bottom
-  foldM procDecl' Map.empty (map stripAnns $ progDecls prog)
+-- | Constructs global environment for a Program.
+globalEnv :: Program a -> Either HissError Environment
+globalEnv prog = do
+  foldM insertDecl Map.empty (map stripAnns $ progDecls prog)
 
+-- | Interprets a program.
 interp :: Program a -> Either HissError HissValue
 interp prog = do
-  env <- baseEnv prog
+  env <- globalEnv prog
   -- lookup and evaluate main function
   case Name () "main" `Map.lookup` env of
     Just (Func _ _ [] body) -> eval env body
@@ -76,11 +80,9 @@ interp prog = do
     Just x -> Left (RuntimeError $ "Type error: 'main' must be declared as function, not " <> showType x)
     Nothing -> Left (RuntimeError "Name error: missing function 'main'")
 
--- Evaluates an AST.
+-- | Evaluates an expression in a given environment.
 eval :: Environment -> Expr a -> Either HissError HissValue
-eval env e = evalState (runExceptT $ eval' e') env
-  where
-    e' = stripAnns e
+eval env e = evalState (runExceptT $ eval' $ stripAnns e) env
 
 eval' :: Expr () -> Hiss HissValue
 -- literals evaluate to themselves
@@ -100,7 +102,7 @@ eval' (EVar () n) = do
   env <- get
   case Map.lookup n env of
     Just val -> return val
-    Nothing -> throwError (RuntimeError $ "Name error: name " <> getIdent n <> " undefined in current environment")
+    Nothing -> throwError (RuntimeError $ "Name error: name '" <> getIdent n <> "' undefined in current environment")
 eval' (ELetIn () b valExp inExp) = do
   case b of
     -- val binding
@@ -145,7 +147,7 @@ eval' (EFunApp () fun argExps) = do
           env <- mergeEnv captured
           -- insert binding for each function argument
           zipWithM_ insertBinding argNames argVals
-          -- insert binding for function itself
+          -- insert binding for function itself (enables recursive calls)
           insertBinding_ name func
           -- evaluate function body
           retVal <- eval' body
@@ -153,14 +155,28 @@ eval' (EFunApp () fun argExps) = do
           put env
           return retVal
         LT -> do
-          -- partial application: create a new closure
+          {-
+          we handle partial application of f creating a new closure f' whose:
+            * captured env contains supplied args of f
+            * args are the unsupplied args of f
+          -}
           let nArgs = length argExps -- number of args provided
           argVals <- mapM eval' argExps -- evaluate the provided args
+
+          -- create environment that maps supplied args to their values
           let partialEnv = Map.fromList (zip argNames argVals) :: Environment
-          let captured' = partialEnv `Map.union` captured -- update captured environment with bindings for provided args
-          let argNames' = drop nArgs argNames -- drop provided args from resulting closure
-          return (Func captured' name argNames' body)
-        GT -> throwError (RuntimeError $ "Type error: function expects " <> show (length argNames) <> " arguments, but " <> show (length argExps) <> " were provided.")
+          -- merge it with original environment
+          let captured' = partialEnv `Map.union` captured
+
+          {-
+          we do not want to overwrite the binding of f to its own body
+          so we append '$partial' to the name to make it unique
+          -}
+          let name' = Name () $ getIdent name <> "$partial"
+          -- finally, we drop the supplied args from the resulting closure
+          let argNames' = drop nArgs argNames
+          return $ Func captured' name' argNames' body
+        GT -> throwError (RuntimeError $ "Type error: function '" <> getIdent name <> "' expects " <> show (length argNames) <> " arguments, but " <> show (length argExps) <> " were provided.")
     x -> throwError (RuntimeError $ "Type error: " <> show x <> " is not a function")
 eval' (EIf () condExp thenExp elseExp) = do
   condVal <- eval' condExp
@@ -194,7 +210,7 @@ evalBinOp op (Bool a) (Bool b) = case op of
   _ -> throwError (RuntimeError $ "Type error: operator " <> show op <> " cannot be applied to arguments of type bool,bool")
 evalBinOp op x y = throwError (RuntimeError $ "Type error: operator " <> show op <> " cannot be applied to arguments of type " <> showType x <> "," <> showType y)
 
--- Binds 'name' to 'val' in current environment and returns the old environment.
+-- | Binds 'name' to 'val' in current environment and returns the old environment.
 insertBinding :: Name () -> HissValue -> Hiss Environment
 insertBinding name val = do
   env <- get
@@ -202,12 +218,12 @@ insertBinding name val = do
   put env'
   return env
 
--- Binds 'name' to 'val' in current environment.
+-- | Binds 'name' to 'val' in current environment.
 insertBinding_ :: Name () -> HissValue -> Hiss ()
 insertBinding_ name val = void (insertBinding name val)
 
--- Merges an environment with the current environment and returns the old environment.
--- Prefers new bindings over current ones in case of duplicate names.
+-- | Merges an environment with the current environment and returns the old environment.
+--   Prefers new bindings over current ones in case of duplicate names.
 mergeEnv :: Environment -> Hiss Environment
 mergeEnv env' = do
   env <- get
