@@ -15,7 +15,7 @@ stop (Range _ p) = p
 
 -- | Gets the line and column of an AlexPosn.
 getLineCol :: AlexPosn -> (Int, Int)
-getLineCol (AlexPn l c _) = (l, c)
+getLineCol (AlexPn _ l c) = (l, c)
 
 -- Wraps Lexer.parseProgram and returns HissError in case of failure
 parseProgram :: String -> Either HissError (Program Range)
