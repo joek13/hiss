@@ -1,12 +1,12 @@
 {
-module Syntax.Parser ( parseExp, parseProg, parseDecl ) where
+module Syntax.Parser ( parseExpr, parseProg, parseDecl ) where
 import Syntax.Lexer ( Lexeme(..), Range(..), AlexPosn(..), Alex, mergeRange, alexError, alexGetInput, alexMonadScan )
 import qualified Syntax.Lexer as T (Token (..))
-import Syntax.AST( Decl(..), Exp(..), Name(..), UnaryOp(..), BinOp(..), Binding(..), FunApp(..), getAnn )
+import Syntax.AST( Program(..), Decl(..), Expr(..), Name(..), UnaryOp(..), BinOp(..), Binding(..), getAnn )
 import Data.Maybe (fromJust)
 }
 
-%name parseExp exp
+%name parseExpr expr
 %name parseProg prog
 %name parseDecl decl
 %tokentype { Lexeme } 
@@ -55,41 +55,41 @@ import Data.Maybe (fromJust)
 
 %%
 -- a Hiss program consists of zero or more declarations
-prog : {- empty -}                         { [] }
-     | decls                               { $1 }
+prog : {- empty -}                         { emptyProg }
+     | decls                               { mkProg $1 }
 
 -- one or more declarations
 decls : decl                               { [$1] }
       | decls decl                         { $2:$1 }
 
 -- a top-level declaration
-decl : binding '=' exp                     { mkDecl $1 $3 }
+decl : binding '=' expr                     { mkDecl $1 $3 }
 
 -- a Hiss expression
-exp  : atom                                { $1 }
-     | '!' atom                            { mkUnaryOpExp $1 $2 }
-     | funApp                              { mkFunAppExp $1 }
-     | 'let' binding '=' exp 'in' exp      { mkLetInExp $2 $4 $6}
-     | 'if' exp 'then' exp 'else' exp      { mkIfExp $2 $4 $6 }
-     | exp '*' exp                         { mkBinOpExp $1 Mult $3 }
-     | exp '/' exp                         { mkBinOpExp $1 Div $3 }
-     | exp '+' exp                         { mkBinOpExp $1 Add $3 }
-     | exp '-' exp                         { mkBinOpExp $1 Sub $3 }
-     | exp '==' exp                        { mkBinOpExp $1 Equals $3 }
-     | exp '!=' exp                        { mkBinOpExp $1 NotEquals $3 }
-     | exp '<' exp                         { mkBinOpExp $1 LessThan $3 }
-     | exp '>' exp                         { mkBinOpExp $1 GreaterThan $3 }
-     | exp '<=' exp                        { mkBinOpExp $1 LessEqual $3 }
-     | exp '>=' exp                        { mkBinOpExp $1 GreaterEqual $3 }
-     | exp '&&' exp                        { mkBinOpExp $1 And $3 }
-     | exp '||' exp                        { mkBinOpExp $1 Or $3 }
+expr  : atom                                { $1 }
+      | '!' atom                            { mkUnaryOpExpr $1 $2 }
+      | atom '(' funArgs ')'                { mkFunAppExpr $1 $3 $4 }
+      | 'let' binding '=' expr 'in' expr    { mkLetInExpr $2 $4 $6}
+      | 'if' expr 'then' expr 'else' expr   { mkIfExpr $2 $4 $6 }
+      | expr '*' expr                       { mkBinOpExpr $1 Mult $3 }
+      | expr '/' expr                       { mkBinOpExpr $1 Div $3 }
+      | expr '+' expr                       { mkBinOpExpr $1 Add $3 }
+      | expr '-' expr                       { mkBinOpExpr $1 Sub $3 }
+      | expr '==' expr                      { mkBinOpExpr $1 Equals $3 }
+      | expr '!=' expr                      { mkBinOpExpr $1 NotEquals $3 }
+      | expr '<' expr                       { mkBinOpExpr $1 LessThan $3 }
+      | expr '>' expr                       { mkBinOpExpr $1 GreaterThan $3 }
+      | expr '<=' expr                      { mkBinOpExpr $1 LessEqual $3 }
+      | expr '>=' expr                      { mkBinOpExpr $1 GreaterEqual $3 }
+      | expr '&&' expr                      { mkBinOpExpr $1 And $3 }
+      | expr '||' expr                      { mkBinOpExpr $1 Or $3 }
 
 -- smallest expression: some literal or a parenthesized expression
-atom : 'true'                              { mkBoolExp $1 }
-     | 'false'                             { mkBoolExp $1 }
-     | int                                 { mkIntExp $1 }
-     | ident                               { mkVarExp $1 }
-     | '(' exp ')'                         { mkParenExp $1 $2 $3 }
+atom : 'true'                              { mkBoolExpr $1 }
+     | 'false'                             { mkBoolExpr $1 }
+     | int                                 { mkIntExpr $1 }
+     | ident                               { mkVarExpr $1 }
+     | '(' expr ')'                        { mkParenExpr $1 $2 $3 }
 
 -- either a value binding (just a name) or a func binding (a func name and zero or more arg names)
 binding : ident                            { mkValBinding $1 }
@@ -99,51 +99,58 @@ funBindingArgs : {- empty -}               { [] :: [Lexeme] }
                | ident                     { [$1] }
                | funBindingArgs ',' ident  { $3 : $1 }
 
-funApp : atom '(' funArgs ')'              { mkFunApp $1 $3 }
-
-funArgs : {- empty -}                      { [] :: [Exp Range] }
-        | exp                              { [$1] }
-        | funArgs ',' exp                  { $3 : $1 }
+funArgs : {- empty -}                      { [] :: [Expr Range] }
+        | expr                             { [$1] }
+        | funArgs ',' expr                 { $3 : $1 }
 
 {
-mkDecl :: Binding Range -> Exp Range -> Decl Range
+emptyProg :: Program Range
+emptyProg = Program (Range (AlexPn 0 0 0) (AlexPn 0 0 0)) []
+
+mkProg :: [Decl Range] -> Program Range
+mkProg decls = Program r (reverse decls)
+    where r = foldl1 mergeRange (map getAnn decls)
+
+mkDecl :: Binding Range -> Expr Range -> Decl Range
 mkDecl b e1 = Decl r b e1
     where r = (getAnn b) `mergeRange` (getAnn e1)
 
-mkUnaryOpExp :: Lexeme -> Exp Range -> Exp Range
-mkUnaryOpExp Lexeme{ tok=T.Not, rng=r1 } e1 = EUnaryOp r1 Not e1
+mkUnaryOpExpr :: Lexeme -> Expr Range -> Expr Range
+mkUnaryOpExpr Lexeme{ tok=T.Not, rng=r1 } e1 = EUnaryOp r1 Not e1
     where r = r1 `mergeRange` (getAnn e1)
 
-mkLetInExp :: Binding Range -> Exp Range -> Exp Range -> Exp Range
-mkLetInExp binding e1 e2 = ELetIn r binding e1 e2
+mkLetInExpr :: Binding Range -> Expr Range -> Expr Range -> Expr Range
+mkLetInExpr binding e1 e2 = ELetIn r binding e1 e2
     where r = (getAnn binding) `mergeRange` (getAnn e1) `mergeRange` (getAnn e2) 
 
-mkIfExp :: Exp Range -> Exp Range -> Exp Range -> Exp Range
-mkIfExp e1 e2 e3 = EIf r e1 e2 e3
+mkIfExpr :: Expr Range -> Expr Range -> Expr Range -> Expr Range
+mkIfExpr e1 e2 e3 = EIf r e1 e2 e3
     where r = (getAnn e1) `mergeRange` (getAnn e2) `mergeRange` (getAnn e3)
 
-mkBoolExp :: Lexeme -> Exp Range
-mkBoolExp Lexeme { tok=T.True, rng=r } = EBool r True
-mkBoolExp Lexeme { tok=T.False, rng=r } = EBool r False
-mkBoolExp _ = error "Compiler bug: mkBoolExp called with a non-bool lexeme"
+mkBoolExpr :: Lexeme -> Expr Range
+mkBoolExpr Lexeme { tok=T.True, rng=r } = EBool r True
+mkBoolExpr Lexeme { tok=T.False, rng=r } = EBool r False
+mkBoolExpr _ = error "Compiler bug: mkBoolExpr called with a non-bool lexeme"
 
-mkIntExp :: Lexeme -> Exp Range
-mkIntExp Lexeme { tok=T.Int, val=str, rng=r } = EInt r (read str)
-mkIntExp _ = error "Compiler bug: mkIntExp called with a non-int lexeme"
+mkIntExpr :: Lexeme -> Expr Range
+mkIntExpr Lexeme { tok=T.Int, val=str, rng=r } = EInt r (read str)
+mkIntExpr _ = error "Compiler bug: mkIntExpr called with a non-int lexeme"
 
-mkVarExp :: Lexeme -> Exp Range
-mkVarExp Lexeme { rng = rng, tok = tok, val = val }
+mkVarExpr :: Lexeme -> Expr Range
+mkVarExpr Lexeme { rng = rng, tok = tok, val = val }
     = EVar rng (Name rng val)
 
-mkFunAppExp :: FunApp Range -> Exp Range
-mkFunAppExp funApp = EFunApp (getAnn funApp) funApp
+mkFunAppExpr :: Expr Range -> [Expr Range] -> Lexeme -> Expr Range
+mkFunAppExpr e1 es Lexeme { rng=r } = EFunApp r' e1 (reverse es)
+    where r' | length es == 0 = (getAnn e1) `mergeRange` r
+             | otherwise      = (getAnn e1) `mergeRange` (foldl1 mergeRange (map getAnn es)) `mergeRange` r
 
-mkBinOpExp :: Exp Range -> BinOp -> Exp Range -> Exp Range
-mkBinOpExp e1 op e2 = EBinOp r e1 op e2
+mkBinOpExpr :: Expr Range -> BinOp -> Expr Range -> Expr Range
+mkBinOpExpr e1 op e2 = EBinOp r e1 op e2
     where r = (getAnn e1) `mergeRange` (getAnn e2)
 
-mkParenExp :: Lexeme -> Exp Range -> Lexeme -> Exp Range
-mkParenExp Lexeme { rng = lRng } e1 Lexeme { rng = rRng } = EParen r (e1)
+mkParenExpr :: Lexeme -> Expr Range -> Lexeme -> Expr Range
+mkParenExpr Lexeme { rng = lRng } e1 Lexeme { rng = rRng } = EParen r (e1)
     where r = lRng `mergeRange` rRng
 
 -- Creates a value binding
@@ -162,12 +169,6 @@ mkFuncBinding Lexeme { tok = T.Ident, val=name, rng=r1 } argLexemes = FuncBindin
     where args = map mkName argLexemes
           r' | length args == 0 = r1
              | otherwise        = r1 `mergeRange` (foldl1 mergeRange (map getAnn args))
-
--- Creates a function application with a function name and one argument
-mkFunApp :: Exp Range -> [Exp Range] -> FunApp Range
-mkFunApp e1 es = FunApp r e1 (reverse es)
-    where r | length es == 0 = getAnn e1
-            | otherwise      = (getAnn e1) `mergeRange` (foldl1 mergeRange (map getAnn es))
 
 parseError :: Lexeme -> Alex a
 parseError _ = do

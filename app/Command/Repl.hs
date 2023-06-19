@@ -4,11 +4,10 @@ import Command (Command (Repl), ReplOptions (..))
 import Data.List (intercalate)
 import Data.Map.Strict (assocs)
 import Error (HissError, showErr)
-import Interpreter.TreeWalker (Environment, baseEnv, eval, procDecl)
+import Interpreter.TreeWalker (Environment, eval, globalEnv, insertDecl)
 import Options.Applicative (Parser, ParserInfo, argument, help, helper, info, metavar, progDesc, str, (<**>))
-import Semantic.Names (progCheckNames)
 import Syntax (parseDeclOrExp, parseProgram)
-import Syntax.AST (getIdent)
+import Syntax.AST (getIdent, stripAnns)
 import System.IO (hFlush, stdout)
 
 parser :: Parser Command
@@ -18,7 +17,7 @@ replOptsParser :: ParserInfo Command
 replOptsParser = info (parser <**> helper) (progDesc "Load a Hiss program and start a REPL")
 
 loadProg :: String -> Either HissError Environment
-loadProg src = parseProgram src >>= progCheckNames >>= baseEnv
+loadProg src = parseProgram src >>= globalEnv
 
 printEnv :: Environment -> IO ()
 printEnv env = do
@@ -66,7 +65,7 @@ doRepl' env = do
             doRepl' env
       Right (Left decl) ->
         -- process decl
-        case procDecl env decl of
+        case insertDecl env (stripAnns decl) of
           Right env' -> do
             -- repl in modified environment
             printEnv env'

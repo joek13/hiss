@@ -2,7 +2,7 @@ module Syntax.ParserSpec (spec) where
 
 import Error (HissError (..))
 import Syntax (parseExpression)
-import Syntax.AST (BinOp (..), Binding (..), Exp (..), FunApp (..), Name (..), getAnn, stripAnns)
+import Syntax.AST (BinOp (..), Binding (..), Expr (..), Name (..), getAnn, stripAnns)
 import Syntax.Lexer (AlexPosn (AlexPn), Range (..))
 import Test.Hspec (Spec, describe, it, shouldBe)
 import Util (fromRight)
@@ -71,15 +71,16 @@ spec = do
       stripAnns (fromRight $ parseExpression "f(0,1,2)")
         `shouldBe` EFunApp
           ()
-          (FunApp () (EVar () (Name () "f")) [EInt () 0, EInt () 1, EInt () 2])
+          (EVar () (Name () "f"))
+          [EInt () 0, EInt () 1, EInt () 2]
     it "respects precedence of function application over multiplication" $
       -- note: this test was more critical when we used Haskell-style function application syntax (e.g., "f x" instead of "f(x)")
       stripAnns (fromRight $ parseExpression "f(a) * f(b)")
         `shouldBe` EBinOp
           ()
-          (EFunApp () (FunApp () (EVar () (Name () "f")) [EVar () (Name () "a")]))
+          (EFunApp () (EVar () (Name () "f")) [EVar () (Name () "a")])
           Mult
-          (EFunApp () (FunApp () (EVar () (Name () "f")) [EVar () (Name () "b")]))
+          (EFunApp () (EVar () (Name () "f")) [EVar () (Name () "b")])
     it "correctly tracks range of compound expressions" $
       getAnn (fromRight $ parseExpression "(if a then b else c)")
         `shouldBe` Range (AlexPn 0 1 1) (AlexPn 20 1 21)
