@@ -10,6 +10,7 @@ module Syntax.AST
     progDecls,
     getIdent,
     declGetName,
+    stripAnns,
   )
 where
 
@@ -19,6 +20,10 @@ import Data.Ord (comparing)
 class Annotated n where
   getAnn :: n a -> a
   -- ^ Gets an object's annotation.
+
+-- | Strips annotations from an AST node.
+stripAnns :: (Annotated n, Functor n) => n a -> n ()
+stripAnns = fmap (const ())
 
 -- | A Hiss program, given by zero or more top-level declarations.
 data Program a = Program a [Decl a]
@@ -84,6 +89,13 @@ data Expr a
     EBool a Bool
   | -- | Variable reference.
     EVar a (Name a)
+  | -- | Resolved variable reference.
+    EResolvedVar
+      a
+      Int
+      -- ^ Lexical depth of the resolved name. 0 = global, n > 0 = n nested scopes deep
+      (Name a)
+      -- ^ Name of the resolved variable.
   | -- | Function application.
     EFunApp
       a
@@ -107,6 +119,7 @@ instance Annotated Expr where
   getAnn (EInt a _) = a
   getAnn (EBool a _) = a
   getAnn (EVar a _) = a
+  getAnn (EResolvedVar a _ _) = a
   getAnn (EFunApp a _ _) = a
   getAnn (EUnaryOp a _ _) = a
   getAnn (EBinOp a _ _ _) = a

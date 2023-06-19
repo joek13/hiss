@@ -1,9 +1,21 @@
-module Syntax (parseProgram, parseExpression, parseDeclaration, parseDeclOrExp) where
+module Syntax (parseProgram, parseExpression, parseDeclaration, parseDeclOrExp, start, stop, getLineCol) where
 
 import Error (HissError (SyntaxError))
 import Syntax.AST (Decl, Expr, Program)
-import Syntax.Lexer (Range, runAlex)
+import Syntax.Lexer (AlexPosn (AlexPn), Range (Range), runAlex)
 import Syntax.Parser (parseDecl, parseExpr, parseProg)
+
+-- | Gets a Range's start position.
+start :: Range -> AlexPosn
+start (Range p _) = p
+
+-- | Gets a Range's stop position.
+stop :: Range -> AlexPosn
+stop (Range _ p) = p
+
+-- | Gets the line and column of an AlexPosn.
+getLineCol :: AlexPosn -> (Int, Int)
+getLineCol (AlexPn l c _) = (l, c)
 
 -- Wraps Lexer.parseProgram and returns HissError in case of failure
 parseProgram :: String -> Either HissError (Program Range)

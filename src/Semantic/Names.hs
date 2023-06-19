@@ -1,129 +1,178 @@
-module Semantic.Names (collectNames, expCheckNames, progCheckNames) where
+module Semantic.Names (collectNames, resolveVars) where
 
-import Control.Monad.State (MonadState (get, put), State, evalState)
-import Data.Maybe (maybeToList)
+import Control.Monad (void)
+import Control.Monad.Except (ExceptT, runExceptT, throwError)
+import Control.Monad.State (MonadState (get, put), State, evalState, gets, modify)
+import Data.Map (Map)
+import Data.Map qualified as Map (fromList, insert, lookup)
 import Data.Set (Set)
-import Data.Set qualified as Set (empty, fromList, insert, member, singleton, union)
+import Data.Set qualified as Set (empty, singleton, union)
 import Error (HissError (SemanticError))
-import Syntax.AST (Binding (..), Decl (..), Exp (..), FunApp (..), Name (..), Program, declGetName, getAnn, getIdent)
-import Syntax.Lexer (AlexPosn (..), Range (..))
+import Syntax (getLineCol, start)
+import Syntax.AST (Annotated (getAnn), Binding (..), Decl (..), Expr (..), Name (..), Program (Program), declGetName, getIdent)
+import Syntax.Lexer (Range (..))
 
--- Collects all Names referenced in an expression and its children.
-collectNames :: Exp a -> Set (Name a)
+-- | Collects Names referenced in an expression and all of its descendants.
+collectNames :: Expr a -> Set (Name a)
 collectNames (EBool _ _) = Set.empty
 collectNames (EInt _ _) = Set.empty
 collectNames (EVar _ n) = Set.singleton n
-collectNames (EFunApp _ funApp) = funAppCollectNames funApp
+collectNames (EResolvedVar _ _ n) = Set.singleton n
+collectNames (EFunApp _ f args) = collectNames f `Set.union` foldl Set.union Set.empty (map collectNames args)
 collectNames (EUnaryOp _ _ e1) = collectNames e1
 collectNames (EBinOp _ e1 _ e2) = collectNames e1 `Set.union` collectNames e2
 collectNames (ELetIn _ _ e1 e2) = collectNames e1 `Set.union` collectNames e2
 collectNames (EIf _ e1 e2 e3) = collectNames e1 `Set.union` collectNames e2 `Set.union` collectNames e3
 collectNames (EParen _ e1) = collectNames e1
 
--- Collects all Names referenced in a FunApp and its children.
-funAppCollectNames :: FunApp a -> Set (Name a)
-funAppCollectNames (FunApp _ fun args) = collectNames fun `Set.union` foldl Set.union Set.empty (map collectNames args)
+-- | Table mapping Names to the lexical depth in which they were declared.
+type NameTable = Map (Name Range) Int
 
--- Collects top-level declared names in a program, ensuring that they are unique.
--- Returns HissError if a duplicate is found.
-progCollectDeclNames :: Program Range -> Either HissError (Set (Name Range))
-progCollectDeclNames prog = foldl f (Right Set.empty) (map declGetName prog)
-  where
-    f (Right names) name@(Name r s)
-      | name `Set.member` names = Left (SemanticError $ "Name '" <> s <> "' redeclared at line " <> show line <> ", column " <> show column)
-      | otherwise = Right (name `Set.insert` names)
-      where
-        Range _ (AlexPn _ line column) = r
-    f (Left err) _ = Left err
+-- | State object for variable resolution.
+data ResolveCtx = ResolveCtx
+  { -- | Current lexical depth.
+    depth :: Int,
+    -- | Table mapping names to the lexical depth in which they were declared.
+    nameTable :: NameTable
+  }
 
--- Checks all the names in a program and makes sure they are defined in cnotext.
-progCheckNames :: Program Range -> Either HissError (Program Range)
-progCheckNames prog = do
-  globals <- progCollectDeclNames prog
-  -- given prog's top level declarations,
-  -- checks the body of each decl for undeclared names.
-  case concatMap (checkDecl (globals, globals)) prog of
-    [] -> Right prog -- no errors: return program unchanged
-    msg : _ -> Left (SemanticError msg) -- errors: return first one
-  where
-    -- checks name of a given declaration given (globals, already-declared names)
-    checkDecl decl (Decl _ (ValBinding _ _) body) = expCheckNames' decl body
-    checkDecl (globals, _) (Decl _ (FuncBinding _ _ args) body) = expCheckNames' (globals, globals `Set.union` args') body
-      where
-        args' = Set.fromList args
+modifyDepth :: (Int -> Int) -> Resolve ()
+modifyDepth f = modify (\ctx -> ctx {depth = f (depth ctx)})
 
--- Traverses an expression and make sure each name is defined in its context.
-expCheckNames :: Exp Range -> Either HissError (Exp Range)
-expCheckNames ast = case expCheckNames' (Set.empty, Set.empty) ast of
-  [] -> Right ast -- no errors: return exp unchanged
-  msg : _ -> Left (SemanticError msg) -- errors: return first one
-
-expCheckNames' :: NameSet -> Exp Range -> [String]
--- uses State monad to track currently declared names as we traverse the AST.
-expCheckNames' defined ast = evalState (checkNames' ast) defined
-
--- (globals, defined)
-type NameSet = (Set (Name Range), Set (Name Range))
-
--- Checks if name is declared in current scope.
-checkName :: Name Range -> State NameSet (Maybe String)
-checkName name@(Name r str) = do
-  (_, declaredNames) <- get
-  if name `Set.member` declaredNames
-    then return Nothing
-    else return $ Just $ "Use of undeclared name '" <> str <> "' at line " <> show line <> ", column " <> show column
-  where
-    Range (AlexPn _ line column) _ = r
-
--- Recursively checks that names in the expression and all of its children are declared.
-checkNames' :: Exp Range -> State NameSet [String]
-checkNames' (EInt _ _) = return []
-checkNames' (EBool _ _) = return []
--- EVar: check that the variable is declared
-checkNames' (EVar _ name) = maybeToList <$> checkName name
-checkNames' (EFunApp _ (FunApp _ fun args)) = concat <$> mapM checkNames' (fun : args)
-checkNames' (EUnaryOp _ _ e1) = checkNames' e1
-checkNames' (EBinOp _ e1 _ e2) = concat <$> mapM checkNames' [e1, e2]
-checkNames' (ELetIn _ (ValBinding _ name) e1 e2) = do
-  -- let <name> = <e1> in <e2>
-  (globals, declared) <- get
-  -- check e1 (without new binding)
-  errs1 <- checkNames' e1
-  -- are we shadowing a global?
-  errs0 <- checkDeclShadowsGlobal name
-  -- insert new binding
-  putName name
-  -- check e2 (with new binding)
-  errs2 <- checkNames' e2
-  -- restore old environment
-  put (globals, declared)
-  return $ errs0 ++ errs1 ++ errs2
-checkNames' (ELetIn _ (FuncBinding _ name args) e1 e2) = do
-  -- let <name>(<args>) = <e1> in <e2>
-  -- both name and args are declared in e1
-  -- but only name is declared in e2
-  (globals, declared) <- get
-  errs0 <- checkDeclShadowsGlobal name
-  putName name -- mark name as declared
-  errs2 <- checkNames' e2
-  mapM_ putName args -- mark args as declared
-  errs1 <- checkNames' e1
-  put (globals, declared) -- restore previously declared names
-  return $ errs0 ++ errs1 ++ errs2
-checkNames' (EIf _ e1 e2 e3) = concat <$> mapM checkNames' [e1, e2, e3]
-checkNames' (EParen _ e1) = checkNames' e1
-
-checkDeclShadowsGlobal :: Name Range -> State NameSet [String]
-checkDeclShadowsGlobal name = do
-  (globals, _) <- get
-  if name `Set.member` globals
-    then
-      let Range _ (AlexPn _ line column) = getAnn name
-       in return ["Let binding of '" <> getIdent name <> "' at line " <> show line <> ", column " <> show column <> " shadows global binding"]
-    else return []
-
-putName :: Name Range -> State NameSet ()
+-- | Inserts a Name in nameTable at current depth. Returns old value of nameTable.
+putName :: Name Range -> Resolve NameTable
 putName n = do
-  (globals, declaredNames) <- get
-  put (globals, n `Set.insert` declaredNames)
-  return ()
+  -- get current name table and lexical depth
+  table <- gets nameTable
+  d <- gets depth
+  -- insert name at current depth
+  let table' = Map.insert n d table
+  -- update table
+  modify (\ctx -> ctx {nameTable = table'})
+  -- return old table
+  return table
+
+-- | Inserts a Name in nameTable at current depth.
+putName_ :: Name Range -> Resolve ()
+putName_ n = void $ putName n
+
+-- | Resolves a program's variable references and returns modified AST.
+resolveVars :: Program Range -> Either HissError (Program Range)
+resolveVars prog@(Program _ decls) = evalState (runExceptT $ doResolveVars prog) ctx
+  where
+    -- initial resolution context
+    ctx =
+      ResolveCtx
+        { depth = 0,
+          -- include globals in name table at depth 0
+          nameTable = Map.fromList $ map ((,0) . declGetName) decls
+        }
+
+-- | Resolve monad.
+type Resolve = ExceptT HissError (State ResolveCtx)
+
+doResolveVars :: Program Range -> Resolve (Program Range)
+doResolveVars (Program r decls) = Program r <$> mapM declResolveVars decls
+
+declResolveVars :: Decl Range -> Resolve (Decl Range)
+declResolveVars (Decl r binding expr) = Decl r binding <$> resolvedExpr
+  where
+    resolvedExpr = do
+      -- get resolution context
+      ctx <- get
+
+      -- does binding create new scope?
+      case binding of
+        -- value bindings do not create new scope
+        ValBinding _ _ -> return ()
+        -- function bindings create new scope
+        FuncBinding _ _ args -> do
+          modifyDepth (+ 1) -- enter new scope
+          mapM_ putName args -- insert function args in name table
+
+      -- resolve decl RHS
+      expr' <- exprResolveVars expr
+      -- restore context
+      put ctx
+      -- return resolved RHS
+      return expr'
+
+exprResolveVars :: Expr Range -> Resolve (Expr Range)
+-- let..in expression: update name table and increment scope
+exprResolveVars (ELetIn r binding value body) = do
+  -- let <binding> = <value> in <body>
+  ctx <- get
+
+  case binding of
+    ValBinding _ n -> do
+      -- val bindings cannot be recursive,
+      -- so we resolve value before we create the new scope
+      value' <- exprResolveVars value
+
+      -- create new scope where name is defined
+      modifyDepth (+ 1)
+      putName_ n
+
+      body' <- exprResolveVars body
+
+      -- restore old context
+      put ctx
+
+      return $ ELetIn r binding value' body'
+    FuncBinding _ func args -> do
+      -- func bindings can be recursive
+
+      -- create new scope where name is defined
+      modifyDepth (+ 1)
+      putName_ func
+
+      -- create another scope where args are defined
+      ctx' <- get
+      modifyDepth (+ 1)
+      mapM_ putName args
+
+      -- resolve value (function body)
+      value' <- exprResolveVars value
+
+      put ctx'
+
+      body' <- exprResolveVars body
+
+      put ctx
+      return $ ELetIn r binding value' body'
+-- for variables: use name table to resolve
+exprResolveVars (EVar r n) = do
+  -- lookup name in table
+  table <- gets nameTable
+  case n `Map.lookup` table of
+    Nothing -> throwError $ SemanticError $ "Name error: Use of undeclared name '" <> getIdent n <> "' at line " <> show line <> ", column " <> show col
+      where
+        (line, col) = getLineCol $ start $ getAnn n
+    Just d -> return $ EResolvedVar r d n
+-- should never need to call exprResolveVars on an already-resolved AST
+exprResolveVars (EResolvedVar {}) = error "Compiler bug: exprResolveVars called on EResolvedVar"
+-- most expressions: recursively resolve subexpressions
+exprResolveVars (EFunApp r fun args) = do
+  -- resolve fun
+  fun' <- exprResolveVars fun
+  -- resolve args
+  args' <- mapM exprResolveVars args
+  return $ EFunApp r fun' args'
+exprResolveVars (EUnaryOp r op operand) = EUnaryOp r op <$> exprResolveVars operand
+exprResolveVars (EBinOp r e1 op e2) = do
+  -- resolve LHS
+  e1' <- exprResolveVars e1
+  -- resolve RHS
+  e2' <- exprResolveVars e2
+  return $ EBinOp r e1' op e2'
+exprResolveVars (EIf r cond thenExpr elseExpr) = do
+  -- resolve cond
+  cond' <- exprResolveVars cond
+  -- resolve then
+  thenExpr' <- exprResolveVars thenExpr
+  -- resolve else
+  elseExpr' <- exprResolveVars elseExpr
+  return $ EIf r cond' thenExpr' elseExpr'
+exprResolveVars (EParen r e) = EParen r <$> exprResolveVars e
+-- other expressions: return unmodified
+exprResolveVars expr = return expr
