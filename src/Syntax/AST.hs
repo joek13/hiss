@@ -14,6 +14,7 @@ module Syntax.AST
   )
 where
 
+import Control.Monad (void)
 import Data.Ord (comparing)
 
 -- | Class for a syntax node annotated with, e.g., source range information.
@@ -22,8 +23,8 @@ class Annotated n where
   -- ^ Gets an object's annotation.
 
 -- | Strips annotations from an AST node.
-stripAnns :: (Annotated n, Functor n) => n a -> n ()
-stripAnns = fmap (const ())
+stripAnns :: Functor n => n a -> n ()
+stripAnns = void
 
 -- | A Hiss program, given by zero or more top-level declarations.
 data Program a = Program a [Decl a]
