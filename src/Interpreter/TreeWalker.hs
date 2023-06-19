@@ -1,3 +1,5 @@
+-- | Experimental tree-walk interpreter.
+--   Not currently well-tested, but useful for playing around while we develop the backend.
 module Interpreter.TreeWalker (interp, eval, baseEnv, procDecl, HissValue (..), Environment) where
 
 import Control.Monad (foldM, void)
@@ -10,13 +12,14 @@ import Data.Set ((\\))
 import Data.Set qualified as Set (fromList)
 import Error (HissError (RuntimeError))
 import Semantic.Names (collectNames)
-import Syntax.AST (BinOp (..), Binding (..), Decl (..), Expr (..), Name (..), Program, UnaryOp (..), getIdent, stripAnns, progDecls)
+import Syntax.AST (BinOp (..), Binding (..), Decl (..), Expr (..), Name (..), Program, UnaryOp (..), getIdent, progDecls, stripAnns)
 
 data HissValue
   = Int Integer
   | Bool Bool
   | Func
       Environment -- captured environment (bindings of referenced names)
+      (Name ()) -- function name
       [Name ()] -- argument names
       (Expr ()) -- function body
   deriving (Eq)
@@ -30,8 +33,8 @@ instance Show HissValue where
   show (Int x) = show x
   show (Bool True) = "true"
   show (Bool False) = "false"
-  show (Func _ [] _) = "(function of ())"
-  show (Func _ args _) = "(function of " <> intercalate "," (map getIdent args) <> ")"
+  show (Func _ n [] _) = "(function '" <> getIdent n <> "' of ())"
+  show (Func _ n args _) = "(function '" <> getIdent n <> "' of " <> intercalate "," (map getIdent args) <> ")"
 
 -- An Environment maps names to their value.
 type Environment = Map (Name ()) HissValue
@@ -54,7 +57,7 @@ procDecl' env (Decl _ (FuncBinding _ n args) e) = do
       global bindings cannot be shadowed so they are valid
       in any environment
   -}
-  let v = Func Map.empty args e
+  let v = Func Map.empty n args e
   return $ Map.insert n v env
 
 -- | Constructs base environment containing a program's top-level bindings.
@@ -68,8 +71,8 @@ interp prog = do
   env <- baseEnv prog
   -- lookup and evaluate main function
   case Name () "main" `Map.lookup` env of
-    Just (Func _ [] body) -> eval env body
-    Just (Func _ args _) -> Left (RuntimeError $ "Type error: function 'main' must have zero arguments, not " <> (show . length) args)
+    Just (Func _ _ [] body) -> eval env body
+    Just (Func _ _ args _) -> Left (RuntimeError $ "Type error: function 'main' must have zero arguments, not " <> (show . length) args)
     Just x -> Left (RuntimeError $ "Type error: 'main' must be declared as function, not " <> showType x)
     Nothing -> Left (RuntimeError "Name error: missing function 'main'")
 
@@ -121,7 +124,7 @@ eval' (ELetIn () b valExp inExp) = do
       let capturedEnv = Map.restrictKeys env capturedNames
 
       -- create and bind function object
-      let func = Func capturedEnv args valExp
+      let func = Func capturedEnv n args valExp
       insertBinding_ n func
 
       -- evaluate inExp in new environment
@@ -133,7 +136,7 @@ eval' (ELetIn () b valExp inExp) = do
 eval' (EFunApp () fun argExps) = do
   funVal <- eval' fun
   case funVal of
-    (Func captured argNames body) -> do
+    func@(Func captured name argNames body) -> do
       case compare (length argExps) (length argNames) of
         EQ -> do
           -- all arguments present: apply the function
@@ -142,6 +145,8 @@ eval' (EFunApp () fun argExps) = do
           env <- mergeEnv captured
           -- insert binding for each function argument
           zipWithM_ insertBinding argNames argVals
+          -- insert binding for function itself
+          insertBinding_ name func
           -- evaluate function body
           retVal <- eval' body
           -- restore old environment
@@ -154,7 +159,7 @@ eval' (EFunApp () fun argExps) = do
           let partialEnv = Map.fromList (zip argNames argVals) :: Environment
           let captured' = partialEnv `Map.union` captured -- update captured environment with bindings for provided args
           let argNames' = drop nArgs argNames -- drop provided args from resulting closure
-          return (Func captured' argNames' body)
+          return (Func captured' name argNames' body)
         GT -> throwError (RuntimeError $ "Type error: function expects " <> show (length argNames) <> " arguments, but " <> show (length argExps) <> " were provided.")
     x -> throwError (RuntimeError $ "Type error: " <> show x <> " is not a function")
 eval' (EIf () condExp thenExp elseExp) = do
