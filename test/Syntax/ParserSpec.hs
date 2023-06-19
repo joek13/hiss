@@ -18,18 +18,27 @@ spec = do
           (EInt () 4)
           (EBinOp () (EVar () (Name () "x")) Mult (EVar () (Name () "x")))
     it "respects operator precedence for comparisons and boolean operators" $
-      stripAnns (fromRight $ parseExpression "a < b && c >= d || e <= f")
+      stripAnns (fromRight $ parseExpression "a < b && c >= d || e <= f && g == h")
         `shouldBe` EBinOp
           ()
           ( EBinOp
               ()
-              (EBinOp () (EVar () (Name () "a")) LessThan (EVar () (Name () "b")))
-              And
-              (EBinOp () (EVar () (Name () "c")) GreaterEqual (EVar () (Name () "d")))
+              ( EBinOp
+                  ()
+                  (EBinOp () (EVar () (Name () "a")) LessThan (EVar () (Name () "b")))
+                  And
+                  (EBinOp () (EVar () (Name () "c")) GreaterEqual (EVar () (Name () "d")))
+              )
+              Or
+              (EBinOp () (EVar () (Name () "e")) LessEqual (EVar () (Name () "f")))
           )
-          Or
-          (EBinOp () (EVar () (Name () "e")) LessEqual (EVar () (Name () "f")))
-
+          And
+          ( EBinOp
+              ()
+              (EVar () (Name () "g"))
+              Equals
+              (EVar () (Name () "h"))
+          )
     it "respects operator precedence for add/sub/mult/div" $
       stripAnns (fromRight $ parseExpression "a * b / c + d - e")
         `shouldBe` EBinOp -- i.e., (((a*b)/c)+d)-e
