@@ -4,8 +4,7 @@ import Command (Command (Eval), EvalOptions (..))
 import Error (HissError, showErr)
 import Interpreter.TreeWalker (HissValue, interp)
 import Options.Applicative (Parser, ParserInfo, argument, help, helper, info, metavar, progDesc, str, (<**>))
-import Semantic.Entrypoint (checkEntrypoint)
-import Semantic.Names (progCheckNames)
+import Semantic.Names (resolveVars)
 import Syntax (parseProgram)
 
 parser :: Parser Command
@@ -18,8 +17,7 @@ doEval' :: String -> Either HissError HissValue
 doEval' source = do
   ast <-
     parseProgram source -- parse/lex program
-      >>= progCheckNames -- check names
-      >>= checkEntrypoint -- check main func
+      >>= resolveVars
 
   -- interpret the program
   interp ast

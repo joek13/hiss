@@ -10,7 +10,7 @@ import Data.Set ((\\))
 import Data.Set qualified as Set (fromList)
 import Error (HissError (RuntimeError))
 import Semantic.Names (collectNames)
-import Syntax.AST (BinOp (..), Binding (..), Decl (..), Exp (..), FunApp (..), Name (..), Program, UnaryOp (..), declStripAnns, getIdent, stripAnns)
+import Syntax.AST (BinOp (..), Binding (..), Decl (..), Expr (..), Name (..), Program, UnaryOp (..), getIdent, stripAnns, progDecls)
 
 data HissValue
   = Int Integer
@@ -18,7 +18,7 @@ data HissValue
   | Func
       Environment -- captured environment (bindings of referenced names)
       [Name ()] -- argument names
-      (Exp ()) -- function body
+      (Expr ()) -- function body
   deriving (Eq)
 
 showType :: HissValue -> String
@@ -41,7 +41,7 @@ type Hiss = ExceptT HissError (State Environment)
 
 -- | Updates environmen with a single declaration.
 procDecl :: Environment -> Decl a -> Either HissError Environment
-procDecl env decl = procDecl' env (declStripAnns decl)
+procDecl env decl = procDecl' env (stripAnns decl)
 
 procDecl' :: Environment -> Decl () -> Either HissError Environment
 -- processes a declaration
@@ -61,7 +61,7 @@ procDecl' env (Decl _ (FuncBinding _ n args) e) = do
 baseEnv :: Program a -> Either HissError Environment
 baseEnv prog = do
   -- process declarations from top to bottom
-  foldM procDecl' Map.empty (map declStripAnns prog)
+  foldM procDecl' Map.empty (map stripAnns $ progDecls prog)
 
 interp :: Program a -> Either HissError HissValue
 interp prog = do
@@ -74,12 +74,12 @@ interp prog = do
     Nothing -> Left (RuntimeError "Name error: missing function 'main'")
 
 -- Evaluates an AST.
-eval :: Environment -> Exp a -> Either HissError HissValue
+eval :: Environment -> Expr a -> Either HissError HissValue
 eval env e = evalState (runExceptT $ eval' e') env
   where
     e' = stripAnns e
 
-eval' :: Exp () -> Hiss HissValue
+eval' :: Expr () -> Hiss HissValue
 -- literals evaluate to themselves
 eval' (EBool () b) = return (Bool b)
 eval' (EInt () x) = return (Int x)
@@ -130,7 +130,33 @@ eval' (ELetIn () b valExp inExp) = do
       -- restore old environment
       put env
       return inVal
-eval' (EFunApp () funApp) = evalFunApp funApp
+eval' (EFunApp () fun argExps) = do
+  funVal <- eval' fun
+  case funVal of
+    (Func captured argNames body) -> do
+      case compare (length argExps) (length argNames) of
+        EQ -> do
+          -- all arguments present: apply the function
+          -- evaluate arguments
+          argVals <- mapM eval' argExps
+          env <- mergeEnv captured
+          -- insert binding for each function argument
+          zipWithM_ insertBinding argNames argVals
+          -- evaluate function body
+          retVal <- eval' body
+          -- restore old environment
+          put env
+          return retVal
+        LT -> do
+          -- partial application: create a new closure
+          let nArgs = length argExps -- number of args provided
+          argVals <- mapM eval' argExps -- evaluate the provided args
+          let partialEnv = Map.fromList (zip argNames argVals) :: Environment
+          let captured' = partialEnv `Map.union` captured -- update captured environment with bindings for provided args
+          let argNames' = drop nArgs argNames -- drop provided args from resulting closure
+          return (Func captured' argNames' body)
+        GT -> throwError (RuntimeError $ "Type error: function expects " <> show (length argNames) <> " arguments, but " <> show (length argExps) <> " were provided.")
+    x -> throwError (RuntimeError $ "Type error: " <> show x <> " is not a function")
 eval' (EIf () condExp thenExp elseExp) = do
   condVal <- eval' condExp
   case condVal of
@@ -182,32 +208,3 @@ mergeEnv env' = do
   env <- get
   put (env' `Map.union` env)
   return env
-
-evalFunApp :: FunApp () -> Hiss HissValue
-evalFunApp (FunApp () fun argExps) = do
-  funVal <- eval' fun
-  case funVal of
-    (Func captured argNames body) -> do
-      case compare (length argExps) (length argNames) of
-        EQ -> do
-          -- all arguments present: apply the function
-          -- evaluate arguments
-          argVals <- mapM eval' argExps
-          env <- mergeEnv captured
-          -- insert binding for each function argument
-          zipWithM_ insertBinding argNames argVals
-          -- evaluate function body
-          retVal <- eval' body
-          -- restore old environment
-          put env
-          return retVal
-        LT -> do
-          -- partial application: create a new closure
-          let nArgs = length argExps -- number of args provided
-          argVals <- mapM eval' argExps -- evaluate the provided args
-          let partialEnv = Map.fromList (zip argNames argVals) :: Environment
-          let captured' = partialEnv `Map.union` captured -- update captured environment with bindings for provided args
-          let argNames' = drop nArgs argNames -- drop provided args from resulting closure
-          return (Func captured' argNames' body)
-        GT -> throwError (RuntimeError $ "Type error: function expects " <> show (length argNames) <> " arguments, but " <> show (length argExps) <> " were provided.")
-    x -> throwError (RuntimeError $ "Type error: " <> show x <> " is not a function")
