@@ -18,8 +18,8 @@ import Data.Maybe (fromJust)
 -- associativity and operator precedence
 %right 'else'
 %right 'in' 
-%left '==' '!='
 %left '&&' '||'
+%left '==' '!='
 %nonassoc '<' '>' '<=' '>='
 %left '+' '-'
 %left '*' '/'
