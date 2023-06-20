@@ -6,7 +6,7 @@ import Data.Map.Strict (assocs)
 import Error (HissError, showErr)
 import Interpreter.TreeWalker (Environment, eval, globalEnv, insertDecl)
 import Options.Applicative (Parser, ParserInfo, argument, help, helper, info, metavar, progDesc, str, (<**>))
-import Semantic.Names (checkNames)
+import Semantic.Names (checkNames, reorderDecls)
 import Syntax (parseDeclOrExp, parseProgram)
 import Syntax.AST (getIdent, stripAnns)
 import System.IO (hFlush, stdout)
@@ -18,7 +18,7 @@ replOptsParser :: ParserInfo Command
 replOptsParser = info (parser <**> helper) (progDesc "Load a Hiss program and start a REPL")
 
 loadProg :: String -> Either HissError Environment
-loadProg src = parseProgram src >>= checkNames >>= globalEnv
+loadProg src = parseProgram src >>= checkNames >>= reorderDecls >>= globalEnv
 
 printEnv :: Environment -> IO ()
 printEnv env = do

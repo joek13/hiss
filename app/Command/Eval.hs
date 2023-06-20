@@ -4,7 +4,7 @@ import Command (Command (Eval), EvalOptions (..))
 import Error (HissError, showErr)
 import Interpreter.TreeWalker (HissValue, interp)
 import Options.Applicative (Parser, ParserInfo, argument, help, helper, info, metavar, progDesc, str, (<**>))
-import Semantic.Names (checkNames)
+import Semantic.Names (checkNames, reorderDecls)
 import Syntax (parseProgram)
 
 parser :: Parser Command
@@ -18,6 +18,7 @@ doEval' source = do
   ast <-
     parseProgram source -- parse/lex program
       >>= checkNames
+      >>= reorderDecls
 
   -- interpret the program
   interp ast
