@@ -4,14 +4,14 @@ import Control.Monad (unless, when)
 import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT)
 import Control.Monad.State (MonadState (get, put), State, evalState, gets, modify)
 import Data.Foldable (find)
-import Data.Graph (Tree (Node), graphFromEdges, scc)
-import Data.List (partition)
+import Data.Foldable qualified as Foldable (toList)
+import Data.Function ((&))
+import Data.Graph (graphFromEdges, scc)
 import Data.Map (Map)
 import Data.Map qualified as Map (fromList, lookup)
-import Data.Maybe (catMaybes)
-import Data.Set (Set)
-import Data.Set qualified as Set (empty, insert, map, member, singleton, toList, union)
-import Data.Tree (Tree (rootLabel, subForest))
+import Data.Maybe (catMaybes, fromJust)
+import Data.Set (Set, (\\))
+import Data.Set qualified as Set (empty, fromList, insert, map, member, singleton, toList, union)
 import Error (HissError (SemanticError))
 import Syntax (getLineCol, start)
 import Syntax.AST (Annotated (getAnn), Binding (..), Decl (..), Expr (..), Name (..), Program (..), declGetName, getIdent, progDecls)
@@ -158,60 +158,63 @@ exprCheckNames (EIf _ condExp thenExp elseExp) = do
 exprCheckNames (EParen _ subexpr) = exprCheckNames subexpr
 
 -- | Re-orders a program's declarations to support program interpretation.
---   Moves function declarations to the top, followed by value declarations in
---   dependency order.
---   Returns an error if a value cycle is detected.
+--   Declarations are reorganized into dependency order so that values are
+--   always declared lexically before they are used.
+--   If this is impossible (i.e. there is a cyclic definition), returns an error.
 reorderDecls :: Program Range -> Either HissError (Program Range)
 reorderDecls prog = do
-  let (funcDecls, valDecls) = partition isFuncDecl $ progDecls prog
+  let decls = progDecls prog
 
   -- build map from name -> vertex id
-  let nameToVertex = Map.fromList $ zip (map declGetName valDecls) [0, 1 ..]
-  let edges = map (declAdjList nameToVertex) valDecls
+  let nameToVertex = Map.fromList $ zip (map declGetName decls) [0, 1 ..]
+  let edges = map (declAdjList nameToVertex) decls
 
-  -- dependency graph of program's value bindings
+  -- build dependency graph of program's declarations
   let (graph, nodeFromVertex, _) = graphFromEdges edges
 
-  -- find SCCs
-  let sccs = scc graph
-  -- check if there are any value cycles
-  -- graph is acyclic <=> each SCC contains exactly one vertex
-  let cyclic = find isCyclic sccs
+  let sccs =
+        scc graph -- find strongly connected components (SCCs)
+          & map (fmap (declFromNode . nodeFromVertex)) -- convert from Forest Vertex -> Forest (Decl Range)
 
+  {- in general, a graph is acyclic <=> each SCC contains exactly one vertex
+     In our case, we only care about dependency cycles containing value declarations,
+     since we allow mutually recursive functions
+   -}
+  let cyclic = find isCyclic sccs
+  -- any dependency cycles containing values?
   case cyclic of
-    -- if cycle, report an error
-    -- todo: preview the dependency cycle (e.g. a->b->c->a)
-    Just Node {rootLabel = x} -> Left $ SemanticError $ "Definition of '" <> getIdent name <> "' at line " <> show line <> ", column " <> show col <> " is cyclic"
-      where
-        name = (declGetName . declFromNode . nodeFromVertex) x
-        (line, col) = (getLineCol . start . getAnn) name
-    {- otherwise, the dependency graph is acyclic
-       reorder decls:
-       1. functions (in an arbitrary order)
-       2. values (in reverse topological order)
-       this ensures values can be initialized in the order they are declared -}
-    Nothing -> return $ Program (getAnn prog) $ funcDecls ++ map (declFromNode . nodeFromVertex . rootLabel) sccs
+    Just tree ->
+      -- if yes, find a value to report (since tree root might be a function declaration)
+      let decl = fromJust $ find isValDecl tree
+          name = declGetName decl
+          (line, col) = (getLineCol . start . getAnn) name
+       in Left $ SemanticError $ "Definition of '" <> getIdent name <> "' at line " <> show line <> ", column " <> show col <> " is cyclic"
+    -- if no, return the program in dependency order
+    Nothing -> return $ Program (getAnn prog) $ concatMap Foldable.toList sccs
   where
+    --  Returns True if its argument is a function declaration.
     isFuncDecl (Decl _ (FuncBinding {}) _) = True
     isFuncDecl _ = False
-    isCyclic Node {subForest = []} = False
-    isCyclic _ = True
+    -- Returns True if its argument is a value declaration.
+    isValDecl = not . isFuncDecl
+    -- Returns True if its argument has more than one node and at least one is a value declaration.
+    isCyclic tree = (length tree > 1) && any isValDecl tree
+    -- Extracts declaration from adjacency list node.
     declFromNode (decl, _, _) = decl
 
 -- | Given (name -> vertex) map and a declaration, creates an adjacency list entry
 --   The node is the declaration itself, and the adjacency list tracks dependencies on other declarations.
 declAdjList :: Map (Name Range) Int -> Decl Range -> (Decl Range, Int, [Int])
-declAdjList nameToVertex decl@(Decl _ (ValBinding _ name) body) = (decl, vertex, depVertices)
+declAdjList nameToVertex decl@(Decl _ binding body) = (decl, vertex, depVertices)
   where
+    name = declGetName decl
     -- vertex id of this decl
     vertex = case name `Map.lookup` nameToVertex of
       Just x -> x
       Nothing -> error "Compiler bug: decl name missing from 'nameToVertex' in declAdjList"
-    -- names referenced in body
-    deps = collectNames body -- TODO: also collect values used in function calls, etc.
-    {- lookup vertex ids of deps
-
-       we don't care about function calls (which are missing from nameToVertex) so we can just discard 'Nothing's
-       ...and checkNames has already guaranteed there are no undeclared names -}
+    -- find free vars referenced in body
+    deps = case binding of
+      ValBinding _ _ -> collectNames body
+      FuncBinding _ _ args -> collectNames body \\ (Set.fromList args `Set.union` Set.singleton name)
+    -- lookup vertex ids of deps
     depVertices = catMaybes $ Set.toList $ Set.map (`Map.lookup` nameToVertex) deps
-declAdjList _ _ = error "Compiler bug: declAdjList called on a function binding"
