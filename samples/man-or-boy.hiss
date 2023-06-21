@@ -1,0 +1,29 @@
+/*
+ * Knuth's "Man or boy test." (https://en.wikipedia.org/wiki/Man_or_boy_test)
+ * Adapted from https://rosettacode.org/wiki/Man_or_boy_test#Rust.
+ * Extremely resource intense program to verify semantics of closures.
+ * So far I have tested for k = 0,1,2,3.
+ */
+
+// wraps a value in a closure
+box(x) =
+    let f() = x in
+    f
+
+// given f, returns a function which applies f to itself
+// = the little-omega combinator from lambda calculus
+itself(f) = 
+    let g() = f(f) in
+    g
+
+a(k, x1, x2, x3, x4, x5) =
+    // use combinator to get a recursive closure
+    let b'(f) = a(k-1, itself(f), x1, x2, x3, x4) in
+    let b = itself(b') in
+    if k <= 0 
+        then x4() + x5()
+        else b()
+
+test(k) = a(k, box(1), box(0-1), box(0-1), box(1), box(0))
+
+main() = test(3)

@@ -1,0 +1,11 @@
+// hofstadter female sequence
+f(n) = if n == 0 
+       then 1
+       else n - m(f(n-1))
+
+// male sequence
+m(n) = if n == 0
+       then 0
+       else n - f(m(n-1))
+
+main() = f(6)
