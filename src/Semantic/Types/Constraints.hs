@@ -21,14 +21,17 @@ import Semantic.Types
 import Syntax.AST (BinOp (..), Binding (..), Expr (..), Name, UnaryOp (..), getIdent)
 import Syntax.Lexer (Range)
 
--- | Given a type env and name, looks up its type.
+-- | Given a name, looks up its type in current typing environment.
 lookupName :: Name Range -> Infer Type
 lookupName name = do
   env <- ask
   case Map.lookup name env of
     Nothing -> error $ "Compiler bug: lookup called on missing variable " <> getIdent name
     Just scheme -> do
-      -- let polymorphism: instantiate a new type at each usage
+      {-
+        this achieves half of let-polymorphism
+        a polytype is freshly instantiated upon every usage
+      -}
       instantiate scheme
 
 newtype Counter = Counter {count :: Int}
@@ -36,13 +39,15 @@ newtype Counter = Counter {count :: Int}
 initCounter :: Counter
 initCounter = Counter {count = 0}
 
--- | Type equality constraint.
-newtype Constraint = TyEq (Type, Type)
+-- | Type constraint.
+newtype Constraint
+  = -- | Type equality constraint that fst == snd.
+    TyEq (Type, Type)
   deriving (Eq, Show)
 
 instance Substitutable Constraint where
-  apply s1 (TyEq (t1, t2)) = TyEq (apply s1 t1, apply s1 t2)
-  freeVars (TyEq (t1, t2)) = freeVars t1 `Set.union` freeVars t2
+  apply s1 (TyEq (t1, t2)) = TyEq (apply s1 t1, apply s1 t2) -- substitute LHS and RHS
+  freeVars (TyEq (t1, t2)) = freeVars t1 `Set.union` freeVars t2 -- union of freeVars of LHS and RHS
 
 -- | Type inference monad.
 type Infer =
@@ -63,18 +68,19 @@ fresh = do
 bindEnv :: (Name Range, Scheme) -> Infer a -> Infer a
 bindEnv (name, scheme) = local (Map.insert name scheme)
 
+-- | Binds many names to corresponding type schemes and performs Infer action in the modified environment.
 bindEnvMany :: [(Name Range, Scheme)] -> Infer a -> Infer a
 bindEnvMany pairs = local (\e -> foldl (\m (n, s) -> Map.insert n s m) e pairs)
 
--- | Instantiates a type scheme, replacing its bound variables
--- with fresh type variables.
+-- | Instantiates a type scheme, replacing its bound variables with fresh type variables.
 instantiate :: Scheme -> Infer Type
 instantiate (ForAll vars ty) = do
   vars' <- mapM (const fresh) vars
   let subst = Map.fromList $ zip vars vars'
   return $ apply subst ty
 
--- | Generalizes a type, closing over its free variables
+-- | Generalizes a type with respect to current typing environment,
+-- closing over its free variables.
 generalize :: Type -> Infer Scheme
 generalize ty = do
   env <- ask
@@ -90,19 +96,24 @@ generalize' env ty =
 constrain :: Type -> Type -> Infer ()
 constrain t1 t2 = tell [TyEq (t1, t2)]
 
+-- | Infers type of an expression in current typing environment.
+-- Returns the inferred type and emits constraints to be solved.
 infer :: Expr Range -> Infer Type
 infer expr = case expr of
+  -- typing literals is easy
   EInt _ _ -> return $ TCons CInt
   EBool _ _ -> return $ TCons CBool
+  -- to type variables, we just look up and instantiate the matching type scheme
   EVar _ n -> lookupName n
   EFunApp _ funExpr argExprs -> do
-    funTy <- infer funExpr -- type of the function
-    argTys <- mapM infer argExprs -- list of arguent types
+    funTy <- infer funExpr -- inferred type of the function
+    argTys <- mapM infer argExprs -- list of inferred arguent types
 
     -- fresh variable to represent return type
     retTy <- fresh
-    -- funExpr *should* have this type. matching argument types, return type
-    let funTy' = TFunc argTys retTy
+    let funTy' = TFunc argTys retTy -- funExpr SHOULD have this type -- matching argument/ret types
+
+    -- enforce that funExpr has the type we expect
     constrain funTy funTy'
 
     return retTy
@@ -110,11 +121,22 @@ infer expr = case expr of
   EBinOp _ expr1 op expr2 -> inferBinary op expr1 expr2
   ELetIn _ binding valExpr inExpr -> case binding of
     ValBinding _ n -> do
+      {-
+      TODO: rethink this
+      not necessarily the case that value bindings are monomorphic
+      e.g.,
+
+        let f(x) = x in let g = f in let h = g(0) in g(false)
+
+      doesn't type because g is bound as a value instead of a function
+      and can't take advantage of let-polymorphism
+      even though g has type (a) -> a
+      -}
       valTy <- infer valExpr
       let valSc = ForAll [] valTy
       bindEnv (n, valSc) (infer inExpr)
     FuncBinding _ funcName argNames -> do
-      {- 
+      {-
          ugh!
          we have to break out of this monad for a second.
          to implement let-polymorphism, we want to make sure to infer constraints for a function's arguments
@@ -167,18 +189,21 @@ inferBinary op expr1 expr2 = case op of
   And -> inferLogical
   Or -> inferLogical
   where
+    -- int -> int -> int
     inferArith = do
       expr1Ty <- infer expr1
       expr2Ty <- infer expr2
       constrain expr1Ty (TCons CInt)
       constrain expr2Ty (TCons CInt)
       return $ TCons CInt
+    -- int -> int -> bool
     inferCmp = do
       expr1Ty <- infer expr1
       expr2Ty <- infer expr2
       constrain expr1Ty (TCons CInt)
       constrain expr2Ty (TCons CInt)
       return $ TCons CBool
+    -- bool -> bool -> bool
     inferLogical = do
       expr1Ty <- infer expr1
       expr2Ty <- infer expr2
@@ -253,14 +278,17 @@ bind v t
   | occursIn v t = throwError $ SemanticError "Type error: cannot construct infinite type"
   | otherwise = return (Map.singleton v t, [])
 
+-- | Checks if a type var occurs within a given type.
 occursIn :: Var -> Type -> Bool
 occursIn v t = v `Set.member` freeVars t
 
+-- | Constraint solver.
 solver :: Solve Subst
 solver = do
-  (subst, cs) <- get
+  (subst, cs) <- get -- (incremental solution, remaining constraints)
   case cs of
     [] -> return subst
+    -- take one constraint and solve it
     (TyEq (t1, t2) : cs') -> do
       (s1, cs1) <- unify t1 t2
       put (s1 `compose` subst, cs1 ++ map (apply s1) cs')
