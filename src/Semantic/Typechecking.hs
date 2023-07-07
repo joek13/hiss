@@ -1,11 +1,11 @@
 module Semantic.Typechecking (infer, infer') where
 
 import Data.Map qualified as Map
+import Debug.Trace (trace)
 import Error (HissError)
 import Semantic.Types (Substitutable (apply), Type, TypeEnv)
-import Semantic.Types.Constraints (runInfer)
+import Semantic.Types.Constraints (runInfer, solve)
 import Semantic.Types.Constraints qualified as Constraints (infer)
-import Semantic.Types.Solver (solve)
 import Syntax.AST (Expr)
 import Syntax.Lexer (Range)
 
