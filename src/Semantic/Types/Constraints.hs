@@ -1,4 +1,7 @@
-module Semantic.Types.Constraints where
+{-
+    Functionality for performing type inference, generating type constraints, and solving generated constraints.
+-}
+module Semantic.Types.Constraints (runInfer, infer, solve) where
 
 import Control.Monad (replicateM, when)
 import Control.Monad.Except (Except, MonadError (throwError), runExcept)
@@ -79,16 +82,10 @@ instantiate (ForAll vars ty) = do
   let subst = Map.fromList $ zip vars vars'
   return $ apply subst ty
 
--- | Generalizes a type with respect to current typing environment,
+-- | Generalizes over a type with respect to a given typing environment,
 -- closing over its free variables.
-generalize :: Type -> Infer Scheme
-generalize ty = do
-  env <- ask
-  return $ generalize' env ty
-
--- | Generalizes over a type with respect to a given typing environment.
-generalize' :: TypeEnv -> Type -> Scheme
-generalize' env ty =
+generalize :: TypeEnv -> Type -> Scheme
+generalize env ty =
   let vars = Set.toList $ freeVars ty `Set.difference` freeVars env
    in ForAll vars ty
 
@@ -152,7 +149,7 @@ infer expr = case expr of
           case solve cs of
             Left err -> throwError err
             Right subst -> do
-              let scheme = generalize' (apply subst env) (apply subst funcTy)
+              let scheme = generalize (apply subst env) (apply subst funcTy)
               bindEnv (funcName, scheme) $ local (apply subst) (infer inExpr)
   EIf _ condExpr thenExpr elseExpr -> do
     -- condition must be bool
