@@ -1,18 +1,21 @@
 module Semantic.Types.Constraints where
 
-import Control.Monad (replicateM)
-import Control.Monad.Except (Except, runExcept)
-import Control.Monad.RWS (MonadReader (ask, local), MonadWriter (tell), RWST (runRWST), gets, modify)
+import Control.Monad (replicateM, when)
+import Control.Monad.Except (Except, MonadError (throwError), runExcept)
+import Control.Monad.RWS (MonadReader (ask, local), MonadState (get, put), MonadWriter (tell), RWST (runRWST), gets, modify)
+import Control.Monad.State (StateT (runStateT))
 import Data.Map qualified as Map
 import Data.Set qualified as Set
-import Error (HissError)
+import Error (HissError (SemanticError))
 import Semantic.Types
   ( Cons (CBool, CInt),
     Scheme (..),
+    Subst,
     Substitutable (..),
     Type (TCons, TFunc, TVar),
     TypeEnv,
     Var (Var),
+    compose,
     varNames,
   )
 import Syntax.AST (BinOp (..), Binding (..), Expr (..), Name, UnaryOp (..), getIdent)
@@ -75,8 +78,13 @@ instantiate (ForAll vars ty) = do
 generalize :: Type -> Infer Scheme
 generalize ty = do
   env <- ask
+  return $ generalize' env ty
+
+-- | Generalizes over a type with respect to a given typing environment.
+generalize' :: TypeEnv -> Type -> Scheme
+generalize' env ty =
   let vars = Set.toList $ freeVars ty `Set.difference` freeVars env
-  return $ ForAll vars ty
+   in ForAll vars ty
 
 -- | Appends constraint that t1 == t2.
 constrain :: Type -> Type -> Infer ()
@@ -103,11 +111,27 @@ infer expr = case expr of
   ELetIn _ binding valExpr inExpr -> case binding of
     ValBinding _ n -> do
       valTy <- infer valExpr
-      valSc <- generalize valTy
+      let valSc = ForAll [] valTy
       bindEnv (n, valSc) (infer inExpr)
     FuncBinding _ funcName argNames -> do
-      funcSc <- inferFunc funcName argNames valExpr
-      bindEnv (funcName, funcSc) (infer inExpr)
+      {- 
+         ugh!
+         we have to break out of this monad for a second.
+         to implement let-polymorphism, we want to make sure to infer constraints for a function's arguments
+         before we generalize over unconstrained arguments.
+
+         to do this, we essentially call a sub-inference (that doesn't affect our state) and solve its constraints.
+         then, we use the solved substitution to generate a scheme that only generalizes over unconstrained terms.
+       -}
+      env <- ask
+      case runInfer env (inferFunc funcName argNames valExpr) of
+        Left err -> throwError err
+        Right (funcTy, cs) -> do
+          case solve cs of
+            Left err -> throwError err
+            Right subst -> do
+              let scheme = generalize' (apply subst env) (apply subst funcTy)
+              bindEnv (funcName, scheme) $ local (apply subst) (infer inExpr)
   EIf _ condExpr thenExpr elseExpr -> do
     -- condition must be bool
     condTy <- infer condExpr
@@ -162,7 +186,7 @@ inferBinary op expr1 expr2 = case op of
       constrain expr2Ty (TCons CBool)
       return $ TCons CBool
 
-inferFunc :: Name Range -> [Name Range] -> Expr Range -> Infer Scheme
+inferFunc :: Name Range -> [Name Range] -> Expr Range -> Infer Type
 inferFunc funcName argNames defnExpr = do
   -- create fresh type variables for each function argument
   argTys <- replicateM (length argNames) fresh
@@ -173,7 +197,7 @@ inferFunc funcName argNames defnExpr = do
 
   let funcTy = TFunc argTys retTy -- construct the function type
   let funcSc = ForAll [] funcTy
-  let argPairs = zip argNames argScs -- list of (arg name, arg schema)
+  let argPairs = zip argNames argScs -- list of (arg name, arg scheme)
 
   -- infer the return type of the function from the body
   retTy' <-
@@ -182,9 +206,67 @@ inferFunc funcName argNames defnExpr = do
       (infer defnExpr)
   constrain retTy retTy'
 
-  return funcSc
+  return funcTy
 
 runInfer :: TypeEnv -> Infer a -> Either HissError (a, [Constraint])
 runInfer env m = do
   (a, _s, w) <- runExcept $ runRWST m env initCounter
   return (a, w)
+
+-- | Constraint solver monad.
+type Solve =
+  StateT
+    (Subst, [Constraint]) -- current substitution, remaining constraints
+    (Except HissError) -- can throw HissError
+
+-- | Unifies two types. Returns a substitution that makes the types equal.
+unify :: Type -> Type -> Solve (Subst, [Constraint])
+-- no unification necessary
+unify t1 t2 | t1 == t2 = return (Map.empty, [])
+-- should substitute instances of v with t
+unify (TVar v) t = bind v t
+unify t (TVar v) = bind v t
+-- check that return type and argument types match
+unify ty1@(TFunc args1 ret1) ty2@(TFunc args2 ret2) = do
+  when (length args1 /= length args2) $
+    throwError $
+      SemanticError $
+        "Type error: cannot unify types " <> show ty1 <> " and " <> show ty2 <> " because they have different arities"
+
+  unifyMany (ret1 : args1) (ret2 : args2)
+-- otherwise, unification fails
+unify t1 t2 = throwError $ SemanticError $ "Type error: cannot unify types " <> show t1 <> " and " <> show t2
+
+-- | Unifies many types.
+-- Errors with "compiler bug" if the two lists have different sizes.
+unifyMany :: [Type] -> [Type] -> Solve (Subst, [Constraint])
+unifyMany [] [] = return (Map.empty, [])
+unifyMany (ty1 : tys1) (ty2 : tys2) = do
+  (subst1, cs1) <- unify ty1 ty2
+  (subst2, cs2) <- unifyMany (map (apply subst1) tys1) (map (apply subst1) tys2)
+  return (subst2 `compose` subst1, cs1 ++ cs2)
+unifyMany _ _ = error "Compiler bug: unifyMany called on lists of different sizes"
+
+bind :: Var -> Type -> Solve (Subst, [Constraint])
+bind v t
+  | t == TVar v = return (Map.empty, [])
+  | occursIn v t = throwError $ SemanticError "Type error: cannot construct infinite type"
+  | otherwise = return (Map.singleton v t, [])
+
+occursIn :: Var -> Type -> Bool
+occursIn v t = v `Set.member` freeVars t
+
+solver :: Solve Subst
+solver = do
+  (subst, cs) <- get
+  case cs of
+    [] -> return subst
+    (TyEq (t1, t2) : cs') -> do
+      (s1, cs1) <- unify t1 t2
+      put (s1 `compose` subst, cs1 ++ map (apply s1) cs')
+      solver
+
+solve :: [Constraint] -> Either HissError Subst
+solve cs = do
+  (subst, _s) <- runExcept $ runStateT solver (Map.empty, cs)
+  return subst
