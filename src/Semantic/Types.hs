@@ -21,7 +21,7 @@ newtype Var = Var String
 
 -- infinite list of type variable names - [a, ..., z, a1, ..., z1, a2, ...]
 varNames :: [String]
-varNames = [letter ++ num | letter <- map pure ['a' .. 'z'], num <- "" : map show [(1 :: Integer) ..]]
+varNames = [letter ++ num | num <- "" : map show [(1 :: Integer) ..], letter <- map pure ['a' .. 'z']]
 
 -- | Hiss type.
 data Type
@@ -47,6 +47,7 @@ instance Show Type where
 data Scheme
   = -- | Universal quantifier over zero or more type variables.
     ForAll [Var] Type
+  deriving (Eq, Show)
 
 -- | Concrete types.
 data Cons
@@ -103,74 +104,3 @@ instance Substitutable TypeEnv where
 -- and s1's substitutions are applied over s2's types.
 compose :: Subst -> Subst -> Subst
 compose s1 s2 = Map.map (apply s1) s2 `Map.union` s1
-
--- -- | Infers type of an expression.
--- infer :: TypeEnv -> Expr Range -> Infer (Subst, Type)
--- infer env expr = case expr of
---   EInt _ _ -> return (Map.empty, TCons CInt)
---   EBool _ _ -> return (Map.empty, TCons CBool)
---   EVar _ n -> lookupName env n
---   EUnaryOp _ op subexpr -> inferUnaryOp env op subexpr
---   EBinOp _ expr1 op expr2 -> inferBinaryOp env expr1 op expr2
---   ELetIn _ binding val body ->
---     case binding of
---       ValBinding _ name -> do
---         (s1, t1) <- infer env val
---         let env' = Map.insert name (generalize env t1) env
---         (s2, t2) <- infer (apply s1 env') body
---         return (s1 `compose` s2, t2)
---       FuncBinding _ _ _ -> error "Typing rules for function bindings are unimplemented!"
---   EIf _ condExpr thenExpr elseExpr -> do
---     (s1, t1) <- infer env condExpr
---     (s2, t2) <- infer env thenExpr
---     (s3, t3) <- infer env elseExpr
---     s4 <- unify t1 (TCons CBool)
---     s5 <- unify t2 t3
---     return (foldr1 compose [s1, s2, s3, s4, s5], t2)
---   EParen _ subexpr -> infer env subexpr
-
--- inferUnaryOp :: TypeEnv -> UnaryOp -> Expr Range -> Infer (Subst, Type)
--- inferUnaryOp env op expr = case op of
---   Not -> do
---     (s1, t1) <- infer env expr
---     tv <- fresh
---     s2 <- unify t1 (TCons CBool)
---     s3 <- unify tv (TCons CBool)
---     return (s1 `compose` s2 `compose` s3, apply s3 tv)
-
--- inferBinaryOp :: TypeEnv -> Expr Range -> BinOp -> Expr Range -> Infer (Subst, Type)
--- inferBinaryOp env expr1 op expr2 = case op of
---   Add -> inferArithmetic
---   Sub -> inferArithmetic
---   Mult -> inferArithmetic
---   Div -> inferArithmetic
---   Equals -> inferComparison
---   NotEquals -> inferComparison
---   GreaterThan -> inferComparison
---   GreaterEqual -> inferComparison
---   LessThan -> inferComparison
---   LessEqual -> inferComparison
---   And -> inferLogical
---   Or -> inferLogical
---   where
---     -- int -> int -> int
---     inferArithmetic = do
---       (s1, t1) <- infer env expr1
---       (s2, t2) <- infer (apply s1 env) expr2
---       s3 <- unify t1 (TCons CInt)
---       s4 <- unify t2 (TCons CInt)
---       return (foldr1 compose [s1, s2, s3, s4], TCons CInt)
---     -- int -> int -> bool
---     inferComparison = do
---       (s1, t1) <- infer env expr1
---       (s2, t2) <- infer (apply s1 env) expr2
---       s3 <- unify t1 (TCons CInt)
---       s4 <- unify t2 (TCons CInt)
---       return (foldr1 compose [s1, s2, s3, s4], TCons CBool)
---     -- bool -> bool -> bool
---     inferLogical = do
---       (s1, t1) <- infer env expr1
---       (s2, t2) <- infer (apply s1 env) expr2
---       s3 <- unify t1 (TCons CBool)
---       s4 <- unify t2 (TCons CBool)
---       return (foldr1 compose [s1, s2, s3, s4], TCons CBool)
