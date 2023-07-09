@@ -103,12 +103,12 @@ infer expr = case expr of
   -- to type variables, we just look up and instantiate the matching type scheme
   EVar _ n -> lookupName n
   EFunApp _ funExpr argExprs -> do
-    funTy <- infer funExpr -- inferred type of the function
-    argTys <- mapM infer argExprs -- list of inferred arguent types
+    funTy <- infer funExpr -- infer function type
 
-    -- fresh variable to represent return type
+    -- funExpr SHOULD have this type
     retTy <- fresh
-    let funTy' = TFunc argTys retTy -- funExpr SHOULD have this type -- matching argument/ret types
+    argTys <- mapM infer argExprs
+    let funTy' = mkCurried retTy argTys
 
     -- enforce that funExpr has the type we expect
     constrain funTy funTy'
@@ -164,6 +164,11 @@ infer expr = case expr of
     return thenTy
   EParen _ subexpr -> infer subexpr
 
+-- | Given a return type and list of argument expressions,
+-- constructs a curried function type.
+mkCurried :: Type -> [Type] -> Type
+mkCurried = foldr TFunc
+
 inferUnary :: UnaryOp -> Expr Range -> Infer Type
 inferUnary op expr = case op of
   Not -> do
@@ -217,7 +222,7 @@ inferFunc funcName argNames defnExpr = do
   -- fresh variable for ret type
   retTy <- fresh
 
-  let funcTy = TFunc argTys retTy -- construct the function type
+  let funcTy = mkCurried retTy argTys -- construct the function type
   let funcSc = ForAll [] funcTy
   let argPairs = zip argNames argScs -- list of (arg name, arg scheme)
 
@@ -249,13 +254,8 @@ unify t1 t2 | t1 == t2 = return (Map.empty, [])
 unify (TVar v) t = bind v t
 unify t (TVar v) = bind v t
 -- check that return type and argument types match
-unify ty1@(TFunc args1 ret1) ty2@(TFunc args2 ret2) = do
-  when (length args1 /= length args2) $
-    throwError $
-      SemanticError $
-        "Type error: cannot unify types " <> show ty1 <> " and " <> show ty2 <> " because they have different arities"
-
-  unifyMany (ret1 : args1) (ret2 : args2)
+unify (TFunc arg1 ret1) (TFunc arg2 ret2) = do
+  unifyMany [ret1, arg1] [ret2, arg2]
 -- otherwise, unification fails
 unify t1 t2 = throwError $ SemanticError $ "Type error: cannot unify types " <> show t1 <> " and " <> show t2
 
