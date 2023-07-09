@@ -7,7 +7,6 @@
 
 module Semantic.Types (Type (..), Cons (..), Scheme (..), Substitutable (..), Var (..), Subst, TypeEnv, compose, varNames) where
 
-import Data.List (intercalate)
 import Data.Map (Map)
 import Data.Map qualified as Map (delete, findWithDefault, foldl, map, union)
 import Data.Set (Set)
@@ -31,8 +30,8 @@ data Type
     TVar Var
   | -- | Function type
     TFunc
-      [Type]
-      -- ^ Argument types
+      Type
+      -- ^ Argument type
       Type
       -- ^ Return type
   deriving (Eq)
@@ -40,7 +39,9 @@ data Type
 instance Show Type where
   show (TCons cons) = show cons
   show (TVar (Var v)) = v
-  show (TFunc args ret) = "(" <> intercalate "," (map show args) <> ") -> " <> show ret
+  -- arrow is right associative, so need to parenthesize left argument if it is a function
+  show (TFunc arg@TFunc {} ret) = "(" <> show arg <> ") -> " <> show ret
+  show (TFunc arg ret) = show arg <> " -> " <> show ret
 
 -- | Type schemes, aka polytypes.
 -- A type scheme specifies a family of monomorphic types.
@@ -77,10 +78,10 @@ class Substitutable a where
 instance Substitutable Type where
   apply _ (TCons t) = TCons t
   apply s t@(TVar v) = Map.findWithDefault t v s
-  apply s (TFunc args ret) = TFunc (map (apply s) args) (apply s ret)
+  apply s (TFunc arg ret) = TFunc (apply s arg) (apply s ret)
 
   freeVars (TVar t) = Set.singleton t
-  freeVars (TFunc args ret) = foldl Set.union (freeVars ret) (map freeVars args)
+  freeVars (TFunc arg ret) = freeVars arg `Set.union` freeVars ret
   freeVars _ = Set.empty
 
 instance Substitutable Scheme where
