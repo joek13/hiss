@@ -139,7 +139,7 @@ infer expr = case expr of
          to implement let-polymorphism, we want to make sure to infer constraints for a function's arguments
          before we generalize over unconstrained arguments.
 
-         to do this, we essentially call a sub-inference (that doesn't affect our state) and solve its constraints.
+         to do this, we essentially call a sub-inference and solve its constraints.
          then, we use the solved substitution to generate a scheme that only generalizes over unconstrained terms.
        -}
       env <- ask
@@ -147,10 +147,18 @@ infer expr = case expr of
       case runInfer' ctr env (inferFunc funcName argNames valExpr) of
         Left err -> throwError err
         Right (funcTy, ctr', cs) -> do
+          -- update counter so that type vars are unique across all runInfers
           put ctr'
+          {-
+            propagate constraints in case the sub-inference constrains an existing variable
+            e.g., `add(x) = let inner(y) = x + y in inner` would drop constraint x :: int
+           -}
+          tell cs
+          -- solve function constraints
           case solve cs of
             Left err -> throwError err
             Right subst -> do
+              -- apply solved constraints and generalize over unconstrained variables
               let scheme = generalize (apply subst env) (apply subst funcTy)
               bindEnv (funcName, scheme) $ local (apply subst) (infer inExpr)
   EIf _ condExpr thenExpr elseExpr -> do
@@ -222,19 +230,20 @@ inferFunc funcName argNames defnExpr = do
   argTys <- replicateM (length argNames) fresh
   let argScs = map (ForAll []) argTys
 
-  -- fresh variable for ret type
-  retTy <- fresh
-
-  let funcTy = mkCurried retTy argTys -- construct the function type
+  -- fresh variable for the function type
+  funcTy <- fresh
   let funcSc = ForAll [] funcTy
   let argPairs = zip argNames argScs -- list of (arg name, arg scheme)
 
   -- infer the return type of the function from the body
-  retTy' <-
+  retTy <-
     bindEnvMany
       ((funcName, funcSc) : argPairs) -- include itself since functions can be recursive
       (infer defnExpr)
-  constrain retTy retTy'
+
+  let funcTy' = mkCurried retTy argTys
+
+  constrain funcTy funcTy'
 
   return funcTy
 
