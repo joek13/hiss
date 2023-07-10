@@ -1,5 +1,8 @@
 {-
-    Frontend to typechecking functionality.
+  Frontend for typechecking functionality.
+
+  For definitions, see Semantic.Types.
+  For type inference rules, see Semantic.Types.Constraints.
 -}
 module Semantic.Typechecking (infer, infer') where
 
