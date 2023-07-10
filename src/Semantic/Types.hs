@@ -1,10 +1,8 @@
-{- Hindley-Milner type system based on https://github.com/sdiehl/write-you-a-haskell/blob/master/chapter7/poly/src/Infer.hs
+{-
+  Hiss type definitions.
 
-   Other references:
-   - https://github.com/sdiehl/write-you-a-haskell/blob/master/006_hindley_milner.md
-   - https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system
+  For type inference rules, see Semantic.Types.Constraints.
 -}
-
 module Semantic.Types (Type (..), Cons (..), Scheme (..), Substitutable (..), Var (..), Subst, TypeEnv, compose, varNames, relabel) where
 
 import Control.Monad.State (MonadState (get, put), State, evalState)

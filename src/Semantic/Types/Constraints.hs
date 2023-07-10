@@ -1,5 +1,9 @@
 {-
-    Functionality for performing type inference, generating type constraints, and solving generated constraints.
+  Type inference, constraint generation, and solving.
+
+  Based off of code from https://github.com/sdiehl/write-you-a-haskell/blob/master/006_hindley_milner.md.
+  Other referencees:
+  - https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system
 -}
 module Semantic.Types.Constraints (runInfer, infer, solve) where
 
@@ -119,29 +123,20 @@ infer expr = case expr of
   ELetIn _ binding valExpr inExpr -> case binding of
     ValBinding _ n -> do
       {-
-      TODO: rethink this
-      not necessarily the case that value bindings are monomorphic
-      e.g.,
-
-        let f(x) = x in let g = f in let h = g(0) in g(false)
-
-      doesn't type because g is bound as a value instead of a function
-      and can't take advantage of let-polymorphism
-      even though g has type (a) -> a
+        note that this code means value bindings are always monomorphic, even if you're just declaring a synonym of a polymorphic type.
+        e.g., `let f(x) = x in let g = f in let h = g(false) in let i = g(0)` does not typecheck, since h is monomorphic.
+        will possibly have to rethink this limitation.
       -}
       valTy <- infer valExpr
       let valSc = ForAll [] valTy
       bindEnv (n, valSc) (infer inExpr)
     FuncBinding _ funcName argNames -> do
       {-
-         ugh!
-         we have to break out of this monad for a second.
-         to implement let-polymorphism, we want to make sure to infer constraints for a function's arguments
-         before we generalize over unconstrained arguments.
+        to implement let-polymorphism, we want to infer and solve constraints for a function's arguments
+        then, we generalize over unconstrained type variables in the function type
 
-         to do this, we essentially call a sub-inference and solve its constraints.
-         then, we use the solved substitution to generate a scheme that only generalizes over unconstrained terms.
-       -}
+        to accomplish this, we launch a 'sub-inference' and immediately solve its collected constraints
+      -}
       env <- ask
       ctr <- get
       case runInfer' ctr env (inferFunc funcName argNames valExpr) of
