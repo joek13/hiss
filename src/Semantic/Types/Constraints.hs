@@ -146,7 +146,8 @@ infer expr = case expr of
       ctr <- get
       case runInfer' ctr env (inferFunc funcName argNames valExpr) of
         Left err -> throwError err
-        Right (funcTy, cs) -> do
+        Right (funcTy, ctr', cs) -> do
+          put ctr'
           case solve cs of
             Left err -> throwError err
             Right subst -> do
@@ -238,12 +239,12 @@ inferFunc funcName argNames defnExpr = do
   return funcTy
 
 runInfer :: TypeEnv -> Infer a -> Either HissError (a, [Constraint])
-runInfer = runInfer' initCounter
+runInfer env m = do
+  (a, _ctr, cs) <- runInfer' initCounter env m
+  return (a, cs)
 
-runInfer' :: Counter -> TypeEnv -> Infer a -> Either HissError (a, [Constraint])
-runInfer' ctr env m = do
-  (a, _s, w) <- runExcept $ runRWST m env ctr
-  return (a, w)
+runInfer' :: Counter -> TypeEnv -> Infer a -> Either HissError (a, Counter, [Constraint])
+runInfer' ctr env m = runExcept $ runRWST m env ctr
 
 -- | Constraint solver monad.
 type Solve =
