@@ -5,10 +5,11 @@
    - https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system
 -}
 
-module Semantic.Types (Type (..), Cons (..), Scheme (..), Substitutable (..), Var (..), Subst, TypeEnv, compose, varNames) where
+module Semantic.Types (Type (..), Cons (..), Scheme (..), Substitutable (..), Var (..), Subst, TypeEnv, compose, varNames, relabel) where
 
+import Control.Monad.State (MonadState (get, put), State, evalState)
 import Data.Map (Map)
-import Data.Map qualified as Map (delete, findWithDefault, foldl, map, union)
+import Data.Map qualified as Map (delete, empty, findWithDefault, foldl, insert, lookup, map, union)
 import Data.Set (Set)
 import Data.Set qualified as Set (difference, empty, fromList, singleton, union)
 import Syntax.AST (Name)
@@ -105,3 +106,27 @@ instance Substitutable TypeEnv where
 -- and s1's substitutions are applied over s2's types.
 compose :: Subst -> Subst -> Subst
 compose s1 s2 = Map.map (apply s1) s2 `Map.union` s1
+
+-- | Relabel's a type's variables so that they start with 'a' and continue alphabetically.
+relabel :: Type -> Type
+relabel ty = evalState (relabel' ty) (0, Map.empty)
+  where
+    relabelVar :: Var -> State (Int, Map Var Var) Var
+    relabelVar v = do
+      (ctr, vmap) <- get
+      case v `Map.lookup` vmap of
+        Just v' -> return v'
+        Nothing -> do
+          let v' = Var $ varNames !! ctr
+          let ctr' = ctr + 1
+          let vmap' = Map.insert v v' vmap
+          put (ctr', vmap')
+          return v'
+    relabel' (TVar v) = do
+      v' <- relabelVar v
+      return $ TVar v'
+    relabel' (TFunc t1 t2) = do
+      t1' <- relabel' t1
+      t2' <- relabel' t2
+      return $ TFunc t1' t2'
+    relabel' t = return t
