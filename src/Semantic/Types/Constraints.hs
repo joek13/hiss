@@ -3,7 +3,7 @@
 -}
 module Semantic.Types.Constraints (runInfer, infer, solve) where
 
-import Control.Monad (replicateM, when)
+import Control.Monad (replicateM)
 import Control.Monad.Except (Except, MonadError (throwError), runExcept)
 import Control.Monad.RWS (MonadReader (ask, local), MonadState (get, put), MonadWriter (tell), RWST (runRWST), gets, modify)
 import Control.Monad.State (StateT (runStateT))
@@ -143,7 +143,8 @@ infer expr = case expr of
          then, we use the solved substitution to generate a scheme that only generalizes over unconstrained terms.
        -}
       env <- ask
-      case runInfer env (inferFunc funcName argNames valExpr) of
+      ctr <- get
+      case runInfer' ctr env (inferFunc funcName argNames valExpr) of
         Left err -> throwError err
         Right (funcTy, cs) -> do
           case solve cs of
@@ -164,8 +165,9 @@ infer expr = case expr of
     return thenTy
   EParen _ subexpr -> infer subexpr
 
--- | Given a return type and list of argument expressions,
--- constructs a curried function type.
+-- | Given a return type and list of argument types,
+-- constructs the corresponding curried function type.
+-- I.e., converts from `(a,b,c) -> e` to `a -> (b -> (c -> e))`
 mkCurried :: Type -> [Type] -> Type
 mkCurried = foldr TFunc
 
@@ -236,8 +238,11 @@ inferFunc funcName argNames defnExpr = do
   return funcTy
 
 runInfer :: TypeEnv -> Infer a -> Either HissError (a, [Constraint])
-runInfer env m = do
-  (a, _s, w) <- runExcept $ runRWST m env initCounter
+runInfer = runInfer' initCounter
+
+runInfer' :: Counter -> TypeEnv -> Infer a -> Either HissError (a, [Constraint])
+runInfer' ctr env m = do
+  (a, _s, w) <- runExcept $ runRWST m env ctr
   return (a, w)
 
 -- | Constraint solver monad.
