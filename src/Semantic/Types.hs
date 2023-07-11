@@ -6,6 +6,7 @@
 module Semantic.Types (Type (..), Cons (..), Scheme (..), Substitutable (..), Var (..), Subst, TypeEnv, TypedExpr, compose, varNames, relabel, getTy) where
 
 import Control.Monad.State (MonadState (get, put), State, evalState)
+import Data.Bifunctor qualified
 import Data.Map (Map)
 import Data.Map qualified as Map (delete, empty, findWithDefault, foldl, insert, lookup, map, union)
 import Data.Set (Set)
@@ -107,6 +108,13 @@ instance Substitutable TypeEnv where
 
   -- union of each type scheme's free type variables
   freeVars env = Map.foldl Set.union Set.empty (Map.map freeVars env)
+
+instance Substitutable TypedExpr where
+  -- apply subst to type of this expr and that of all of its subexprs
+  apply s = fmap (Data.Bifunctor.second (apply s))
+
+  -- union of free vars of the type of this expr and all of its subexprs
+  freeVars expr = foldl Set.union Set.empty (fmap (freeVars . snd) expr)
 
 -- | Composes two substitutions.
 -- s1 `compose` s2 contains the substitutions from both s1 and s2,
