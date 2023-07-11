@@ -36,6 +36,7 @@ ghc-options:
 default-extensions:
 - ImportQualifiedPost
 - DeriveFunctor
+- DeriveFoldable
 - FlexibleInstances
 - TupleSections
 
