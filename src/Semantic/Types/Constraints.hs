@@ -21,8 +21,10 @@ import Semantic.Types
     Substitutable (..),
     Type (..),
     TypeEnv,
+    TypedExpr,
     Var (Var),
     compose,
+    getTy,
     varNames,
   )
 import Syntax.AST (BinOp (..), Binding (..), Expr (..), Name, UnaryOp (..), getIdent)
@@ -99,37 +101,51 @@ constrain t1 t2 = tell [TyEq (t1, t2)]
 
 -- | Infers type of an expression in current typing environment.
 -- Returns the inferred type and emits constraints to be solved.
-infer :: Expr Range -> Infer Type
+infer :: Expr Range -> Infer TypedExpr
 infer expr = case expr of
   -- typing literals is easy
-  EInt _ _ -> return $ TCons CInt
-  EBool _ _ -> return $ TCons CBool
+  EInt _ _ -> return $ fmap (,TCons CInt) expr
+  EBool _ _ -> return $ fmap (,TCons CBool) expr
   -- to type variables, we just look up and instantiate the matching type scheme
-  EVar _ n -> lookupName n
-  EFunApp _ funExpr argExprs -> do
-    funTy <- infer funExpr -- infer function type
+  EVar _ n -> do
+    ty <- lookupName n
+    return $ fmap (,ty) expr
+  EFunApp r funExpr argExprs -> do
+    -- infer function type
+    funExpr' <- infer funExpr
+    let funTy = getTy funExpr'
 
     -- funExpr SHOULD have this type
     retTy <- fresh
-    argTys <- mapM infer argExprs
+    argExprs' <- mapM infer argExprs
+    let argTys = map getTy argExprs'
+
     let funTy' = mkCurried retTy argTys
 
     -- enforce that funExpr has the type we expect
     constrain funTy funTy'
 
-    return retTy
-  EUnaryOp _ op subexpr -> inferUnary op subexpr
-  EBinOp _ expr1 op expr2 -> inferBinary op expr1 expr2
-  ELetIn _ binding valExpr inExpr -> case binding of
+    return $ EFunApp (r, retTy) funExpr' argExprs'
+  EUnaryOp {} -> inferUnary expr
+  EBinOp {} -> inferBinary expr
+  ELetIn r binding valExpr inExpr -> case binding of
     ValBinding _ n -> do
       {-
         note that this code means value bindings are always monomorphic, even if you're just declaring a synonym of a polymorphic type.
         e.g., `let f(x) = x in let g = f in let h = g(false) in let i = g(0)` does not typecheck, since h is monomorphic.
         will possibly have to rethink this limitation.
       -}
-      valTy <- infer valExpr
+      valExpr' <- infer valExpr
+      let valTy = getTy valExpr'
+
       let valSc = ForAll [] valTy
-      bindEnv (n, valSc) (infer inExpr)
+      inExpr' <- bindEnv (n, valSc) (infer inExpr)
+      let inTy = getTy inExpr'
+
+      -- bindings don't have types, but it needs an annotation - we use unit
+      let binding' = fmap (,TUnit) binding
+
+      return $ ELetIn (r, inTy) binding' valExpr' inExpr'
     FuncBinding _ funcName argNames -> do
       {-
         to implement let-polymorphism, we want to infer and solve constraints for a function's arguments
@@ -141,7 +157,7 @@ infer expr = case expr of
       ctr <- get
       case runInfer' ctr env (inferFunc funcName argNames valExpr) of
         Left err -> throwError err
-        Right (funcTy, ctr', cs) -> do
+        Right ((funcTy, valExpr'), ctr', cs) -> do
           -- update counter so that type vars are unique across all runInfers
           put ctr'
           {-
@@ -155,18 +171,30 @@ infer expr = case expr of
             Right subst -> do
               -- apply solved constraints and generalize over unconstrained variables
               let scheme = generalize (apply subst env) (apply subst funcTy)
-              bindEnv (funcName, scheme) $ local (apply subst) (infer inExpr)
-  EIf _ condExpr thenExpr elseExpr -> do
+
+              inExpr' <- bindEnv (funcName, scheme) $ local (apply subst) (infer inExpr)
+              let inTy = getTy inExpr'
+
+              -- dummy annotation for binding
+              let binding' = fmap (,TUnit) binding
+
+              return $ ELetIn (r, inTy) binding' valExpr' inExpr'
+  EIf r condExpr thenExpr elseExpr -> do
     -- condition must be bool
-    condTy <- infer condExpr
+    condExpr' <- infer condExpr
+    let condTy = getTy condExpr'
+
     constrain condTy (TCons CBool)
 
     -- then/else must have matching type
-    thenTy <- infer thenExpr
-    elseTy <- infer elseExpr
+    thenExpr' <- infer thenExpr
+    let thenTy = getTy thenExpr'
+    elseExpr' <- infer elseExpr
+    let elseTy = getTy elseExpr'
+
     constrain thenTy elseTy
 
-    return thenTy
+    return $ EIf (r, thenTy) condExpr' thenExpr' elseExpr'
   EParen _ subexpr -> infer subexpr
 
 -- | Given a return type and list of argument types,
@@ -176,15 +204,19 @@ mkCurried :: Type -> [Type] -> Type
 mkCurried ret [] = TFunc TUnit ret
 mkCurried ret args = foldr TFunc ret args
 
-inferUnary :: UnaryOp -> Expr Range -> Infer Type
-inferUnary op expr = case op of
+inferUnary :: Expr Range -> Infer TypedExpr
+inferUnary (EUnaryOp r op expr) = case op of
   Not -> do
-    exprTy <- infer expr
-    constrain exprTy (TCons CBool)
-    return $ TCons CBool
+    expr' <- infer expr
+    let exprTy = getTy expr'
 
-inferBinary :: BinOp -> Expr Range -> Expr Range -> Infer Type
-inferBinary op expr1 expr2 = case op of
+    constrain exprTy (TCons CBool)
+
+    return $ EUnaryOp (r, TCons CBool) op expr'
+inferUnary _ = error "Compiler bug: inferUnary called on something other than EUnaryOp"
+
+inferBinary :: Expr Range -> Infer TypedExpr
+inferBinary (EBinOp r expr1 op expr2) = case op of
   Add -> inferArith
   Sub -> inferArith
   Mult -> inferArith
@@ -200,27 +232,42 @@ inferBinary op expr1 expr2 = case op of
   where
     -- int -> int -> int
     inferArith = do
-      expr1Ty <- infer expr1
-      expr2Ty <- infer expr2
+      expr1' <- infer expr1
+      let expr1Ty = getTy expr1'
+      expr2' <- infer expr2
+      let expr2Ty = getTy expr2'
+
       constrain expr1Ty (TCons CInt)
       constrain expr2Ty (TCons CInt)
-      return $ TCons CInt
+
+      return $ EBinOp (r, TCons CInt) expr1' op expr2'
     -- int -> int -> bool
     inferCmp = do
-      expr1Ty <- infer expr1
-      expr2Ty <- infer expr2
+      expr1' <- infer expr1
+      let expr1Ty = getTy expr1'
+      expr2' <- infer expr2
+      let expr2Ty = getTy expr2'
+
       constrain expr1Ty (TCons CInt)
       constrain expr2Ty (TCons CInt)
-      return $ TCons CBool
+
+      return $ EBinOp (r, TCons CBool) expr1' op expr2'
     -- bool -> bool -> bool
     inferLogical = do
-      expr1Ty <- infer expr1
-      expr2Ty <- infer expr2
+      expr1' <- infer expr1
+      let expr1Ty = getTy expr1'
+      expr2' <- infer expr2
+      let expr2Ty = getTy expr2'
+
       constrain expr1Ty (TCons CBool)
       constrain expr2Ty (TCons CBool)
-      return $ TCons CBool
 
-inferFunc :: Name Range -> [Name Range] -> Expr Range -> Infer Type
+      return $ EBinOp (r, TCons CBool) expr1' op expr2'
+inferBinary _ = error "Compiler bug: inferBinary called on something other than EBinOp"
+
+-- | Given a function's name, the names of its arguments, and its body expr,
+-- infers the type of the function. Returns (inferred function type, typed body expr).
+inferFunc :: Name Range -> [Name Range] -> Expr Range -> Infer (Type, TypedExpr)
 inferFunc funcName argNames defnExpr = do
   -- create fresh type variables for each function argument
   argTys <- replicateM (length argNames) fresh
@@ -232,16 +279,18 @@ inferFunc funcName argNames defnExpr = do
   let argPairs = zip argNames argScs -- list of (arg name, arg scheme)
 
   -- infer the return type of the function from the body
-  retTy <-
+  defnExpr' <-
     bindEnvMany
       ((funcName, funcSc) : argPairs) -- include itself since functions can be recursive
       (infer defnExpr)
+
+  let retTy = getTy defnExpr'
 
   let funcTy' = mkCurried retTy argTys
 
   constrain funcTy funcTy'
 
-  return funcTy
+  return (funcTy, defnExpr')
 
 runInfer :: TypeEnv -> Infer a -> Either HissError (a, [Constraint])
 runInfer env m = do

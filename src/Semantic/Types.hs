@@ -3,14 +3,14 @@
 
   For type inference rules, see Semantic.Types.Constraints.
 -}
-module Semantic.Types (Type (..), Cons (..), Scheme (..), Substitutable (..), Var (..), Subst, TypeEnv, compose, varNames, relabel) where
+module Semantic.Types (Type (..), Cons (..), Scheme (..), Substitutable (..), Var (..), Subst, TypeEnv, TypedExpr, compose, varNames, relabel, getTy) where
 
 import Control.Monad.State (MonadState (get, put), State, evalState)
 import Data.Map (Map)
 import Data.Map qualified as Map (delete, empty, findWithDefault, foldl, insert, lookup, map, union)
 import Data.Set (Set)
 import Data.Set qualified as Set (difference, empty, fromList, singleton, union)
-import Syntax.AST (Name)
+import Syntax.AST (Annotated (getAnn), Expr, Name)
 import Syntax.Lexer (Range)
 
 -- | Hiss type variable.
@@ -44,6 +44,11 @@ instance Show Type where
   -- arrow is right associative, so need to parenthesize left argument if it is a function
   show (TFunc arg@TFunc {} ret) = "(" <> show arg <> ") -> " <> show ret
   show (TFunc arg ret) = show arg <> " -> " <> show ret
+
+type TypedExpr = Expr (Range, Type)
+
+getTy :: TypedExpr -> Type
+getTy = snd . getAnn
 
 -- | Type schemes, aka polytypes.
 -- A type scheme specifies a family of monomorphic types.
