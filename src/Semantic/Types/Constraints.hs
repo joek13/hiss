@@ -19,7 +19,7 @@ import Semantic.Types
     Scheme (..),
     Subst,
     Substitutable (..),
-    Type (TCons, TFunc, TVar),
+    Type (..),
     TypeEnv,
     Var (Var),
     compose,
@@ -173,7 +173,8 @@ infer expr = case expr of
 -- constructs the corresponding curried function type.
 -- I.e., converts from `(a,b,c) -> e` to `a -> (b -> (c -> e))`
 mkCurried :: Type -> [Type] -> Type
-mkCurried = foldr TFunc
+mkCurried ret [] = TFunc TUnit ret
+mkCurried ret args = foldr TFunc ret args
 
 inferUnary :: UnaryOp -> Expr Range -> Infer Type
 inferUnary op expr = case op of

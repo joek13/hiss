@@ -23,7 +23,9 @@ varNames = [letter ++ num | num <- "" : map show [(1 :: Integer) ..], letter <- 
 
 -- | Hiss type.
 data Type
-  = -- | Concrete type
+  = -- | Unit type
+    TUnit
+  | -- | Concrete type
     TCons Cons
   | -- | Type variable
     TVar Var
@@ -36,6 +38,7 @@ data Type
   deriving (Eq)
 
 instance Show Type where
+  show TUnit = "()"
   show (TCons cons) = show cons
   show (TVar (Var v)) = v
   -- arrow is right associative, so need to parenthesize left argument if it is a function
@@ -75,6 +78,7 @@ class Substitutable a where
   freeVars :: a -> Set Var
 
 instance Substitutable Type where
+  apply _ TUnit = TUnit
   apply _ (TCons t) = TCons t
   apply s t@(TVar v) = Map.findWithDefault t v s
   apply s (TFunc arg ret) = TFunc (apply s arg) (apply s ret)
