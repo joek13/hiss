@@ -107,7 +107,7 @@ data Expr a
     EIf a (Expr a) (Expr a) (Expr a)
   | -- | Parenthesized expression.
     EParen a (Expr a)
-  deriving (Eq, Show, Functor)
+  deriving (Eq, Show, Functor, Foldable)
 
 instance Annotated Expr where
   getAnn (EInt a _) = a
@@ -122,7 +122,7 @@ instance Annotated Expr where
 
 -- | Variable name.
 data Name a = Name a String
-  deriving (Show, Functor)
+  deriving (Show, Functor, Foldable)
 
 -- Names compare by their identifiers.
 instance Eq (Name a) where
@@ -145,7 +145,7 @@ data Binding a
     ValBinding a (Name a)
   | -- | Function binding. Function bindings are names with zero or more arguments. e.g., 'f(a,b)' in 'let f(a,b) = a + b in ...'
     FuncBinding a (Name a) [Name a]
-  deriving (Eq, Show, Functor)
+  deriving (Eq, Show, Functor, Foldable)
 
 instance Annotated Binding where
   getAnn (ValBinding a _) = a

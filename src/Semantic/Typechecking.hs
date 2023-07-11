@@ -18,13 +18,12 @@ infer :: TypeEnv -> Expr Range -> Either HissError Type
 infer env expr = do
   -- infer type and collect constraints
   (expr', cs) <- runInfer env (Constraints.infer expr)
-  let ty = getTy expr'
   -- solve for type substitutions
   subst <- solve cs
-  -- apply substitutions to the type
-  let solved = apply subst ty
-  -- and relabel vars
-  let relabeled = relabel solved
+  -- apply substitutions to all types
+  let solved = apply subst expr'
+  -- get type and relabel vars
+  let relabeled = (relabel . getTy) solved
   return relabeled
 
 infer' :: Expr Range -> Either HissError Type
