@@ -28,7 +28,7 @@ stripAnns = void
 
 -- | A Hiss program, given by zero or more top-level declarations.
 data Program a = Program a [Decl a]
-  deriving (Eq, Show, Functor)
+  deriving (Eq, Show, Functor, Foldable)
 
 -- | Gets a program's list of declarations.
 progDecls :: Program a -> [Decl a]
@@ -39,7 +39,7 @@ instance Annotated Program where
 
 -- | Top-level Hiss declaration.
 data Decl a = Decl a (Binding a) (Expr a)
-  deriving (Eq, Show, Functor)
+  deriving (Eq, Show, Functor, Foldable)
 
 instance Annotated Decl where
   getAnn (Decl a _ _) = a

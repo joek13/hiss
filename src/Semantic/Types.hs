@@ -3,7 +3,7 @@
 
   For type inference rules, see Semantic.Types.Constraints.
 -}
-module Semantic.Types (Type (..), Cons (..), Scheme (..), Substitutable (..), Var (..), Subst, TypeEnv, TypedExpr, compose, varNames, relabel, getTy) where
+module Semantic.Types (Type (..), Cons (..), Scheme (..), Substitutable (..), Var (..), Subst, TypeEnv, TypedExpr, compose, varNames, relabel, getTy, emptyEnv) where
 
 import Control.Monad.State (MonadState (get, put), State, evalState)
 import Data.Bifunctor qualified
@@ -11,7 +11,7 @@ import Data.Map (Map)
 import Data.Map qualified as Map (delete, empty, findWithDefault, foldl, insert, lookup, map, union)
 import Data.Set (Set)
 import Data.Set qualified as Set (difference, empty, fromList, singleton, union)
-import Syntax.AST (Annotated (getAnn), Expr, Name)
+import Syntax.AST (Annotated (getAnn), Decl, Expr, Name, Program)
 import Syntax.Lexer (Range)
 
 -- | Hiss type variable.
@@ -46,9 +46,11 @@ instance Show Type where
   show (TFunc arg@TFunc {} ret) = "(" <> show arg <> ") -> " <> show ret
   show (TFunc arg ret) = show arg <> " -> " <> show ret
 
+-- | An expression with associated range and type.
 type TypedExpr = Expr (Range, Type)
 
-getTy :: TypedExpr -> Type
+-- | Gets the type of a typed AST node.
+getTy :: Annotated t => t (Range, Type) -> Type
 getTy = snd . getAnn
 
 -- | Type schemes, aka polytypes.
@@ -74,6 +76,9 @@ type Subst = Map Var Type
 -- | Typing environment.
 -- Maps variable names to bound type schemes.
 type TypeEnv = Map (Name Range) Scheme
+
+emptyEnv :: TypeEnv
+emptyEnv = Map.empty
 
 -- | Class for anything containing type variables that we can substitute away.
 class Substitutable a where
@@ -115,6 +120,14 @@ instance Substitutable TypedExpr where
 
   -- union of free vars of the type of this expr and all of its subexprs
   freeVars expr = foldl Set.union Set.empty (fmap (freeVars . snd) expr)
+
+instance Substitutable (Decl (Range, Type)) where
+  apply s = fmap (Data.Bifunctor.second (apply s))
+  freeVars decl = foldl Set.union Set.empty (fmap (freeVars . snd) decl)
+
+instance Substitutable (Program (Range, Type)) where
+  apply s = fmap (Data.Bifunctor.second (apply s))
+  freeVars decl = foldl Set.union Set.empty (fmap (freeVars . snd) decl)
 
 -- | Composes two substitutions.
 -- s1 `compose` s2 contains the substitutions from both s1 and s2,

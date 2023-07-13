@@ -6,6 +6,7 @@ import Interpreter.TreeWalker (HissValue, interp)
 import Options.Applicative (Parser, ParserInfo, argument, help, helper, info, metavar, progDesc, str, (<**>))
 import Semantic.Dependencies (reorderDecls)
 import Semantic.Names (checkNames)
+import Semantic.Typechecking (Typecheck (..))
 import Syntax (parseProgram)
 
 parser :: Parser Command
@@ -20,6 +21,7 @@ doEval' source = do
     parseProgram source -- parse/lex program
       >>= checkNames
       >>= reorderDecls
+      >>= typecheck
 
   -- interpret the program
   interp ast

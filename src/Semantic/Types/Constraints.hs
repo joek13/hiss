@@ -5,7 +5,7 @@
   Other referencees:
   - https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system
 -}
-module Semantic.Types.Constraints (runInfer, infer, solve) where
+module Semantic.Types.Constraints (runInfer, infer, inferDecl, inferProgram, solve) where
 
 import Control.Monad (replicateM)
 import Control.Monad.Except (Except, MonadError (throwError), runExcept)
@@ -27,7 +27,7 @@ import Semantic.Types
     getTy,
     varNames,
   )
-import Syntax.AST (BinOp (..), Binding (..), Expr (..), Name, UnaryOp (..), getIdent)
+import Syntax.AST (BinOp (..), Binding (..), Decl (..), Expr (..), Name, Program (..), UnaryOp (..), declGetName, getIdent)
 import Syntax.Lexer (Range)
 
 -- | Given a name, looks up its type in current typing environment.
@@ -100,7 +100,7 @@ constrain :: Type -> Type -> Infer ()
 constrain t1 t2 = tell [TyEq (t1, t2)]
 
 -- | Infers type of an expression in current typing environment.
--- Returns the inferred type and emits constraints to be solved.
+-- Returns type annotated expression and emits constraints to be solved.
 infer :: Expr Range -> Infer TypedExpr
 infer expr = case expr of
   -- typing literals is easy
@@ -291,6 +291,43 @@ inferFunc funcName argNames defnExpr = do
   constrain funcTy funcTy'
 
   return (funcTy, defnExpr')
+
+-- | Infers type of a decl in current typing environment.
+-- Returns type annotated decl and emits constraints.
+inferDecl :: Decl Range -> Infer (Decl (Range, Type))
+inferDecl (Decl a binding@(ValBinding {}) defn) = do
+  -- binding has type TUnit
+  let binding' = fmap (,TUnit) binding
+  defn' <- infer defn
+  -- decl has type of thing declared
+  return $ Decl (a, getTy defn') binding' defn'
+inferDecl (Decl a binding@(FuncBinding _ funcName argNames) defnExpr) = do
+  -- binding has type TUnit
+  let binding' = fmap (,TUnit) binding
+  (funcTy, defn') <- inferFunc funcName argNames defnExpr
+  -- decl has type of thing declared
+  return $ Decl (a, funcTy) binding' defn'
+
+-- | Infers type of a program in current typing environment.
+-- Returns type annotated program and emits constraints.
+inferProgram :: Program Range -> Infer (Program (Range, Type))
+inferProgram (Program r decls) = do
+  -- instantiate fresh type variables for each top-level binding
+  bindingTys <- replicateM (length decls) fresh
+  let bindingScs = map (ForAll []) bindingTys
+
+  let bindingNames = map declGetName decls
+
+  -- perform binding before inferring individual decls
+  bindEnvMany
+    (zip bindingNames bindingScs)
+    ( do
+        -- infer type of each declaration
+        decls' <- mapM inferDecl decls
+        -- constrain type of declaration to its associated type variable
+        mapM_ (uncurry constrain) (zip (map getTy decls') bindingTys)
+        return $ Program (r, TUnit) decls'
+    )
 
 runInfer :: TypeEnv -> Infer a -> Either HissError (a, [Constraint])
 runInfer env m = do
