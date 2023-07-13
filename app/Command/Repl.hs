@@ -2,14 +2,19 @@ module Command.Repl (replOptsParser, doRepl) where
 
 import Command (Command (Repl), ReplOptions (..))
 import Data.List (intercalate)
+import Data.Map qualified as Map (insert, lookup, mapKeys)
 import Data.Map.Strict (assocs)
 import Error (HissError, showErr)
-import Interpreter.TreeWalker (Environment, eval, globalEnv, insertDecl)
+import Interpreter.TreeWalker (Environment, HissValue, eval, globalEnv, insertDecl)
 import Options.Applicative (Parser, ParserInfo, argument, help, helper, info, metavar, progDesc, str, (<**>))
 import Semantic.Dependencies (reorderDecls)
 import Semantic.Names (checkNames)
+import Semantic.Typechecking (Typecheck (..), getTypeEnv)
+import Semantic.Types (Type, TypeEnv, emptyEnv, getTy)
+import Semantic.Types.Constraints (generalize)
 import Syntax (parseDeclOrExp, parseProgram)
-import Syntax.AST (getIdent, stripAnns)
+import Syntax.AST (Name (..), declGetName, getIdent, stripAnns)
+import Syntax.Lexer (Range)
 import System.IO (hFlush, stdout)
 
 parser :: Parser Command
@@ -18,23 +23,40 @@ parser = Repl . ReplOptions <$> argument str (metavar "FILE" <> help "Source His
 replOptsParser :: ParserInfo Command
 replOptsParser = info (parser <**> helper) (progDesc "Load a Hiss program and start a REPL")
 
-loadProg :: String -> Either HissError Environment
-loadProg src = parseProgram src >>= checkNames >>= reorderDecls >>= globalEnv
+loadProg :: String -> Either HissError ReplEnv
+loadProg src = do
+  ast <-
+    parseProgram src
+      >>= checkNames
+      >>= reorderDecls
+      >>= typecheck
 
-printEnv :: Environment -> IO ()
-printEnv env = do
-  putStr "{"
-  putStr $ intercalate ", " (map showBinding (assocs env))
-  putStrLn "}"
-  where
-    showBinding (n, v) = getIdent n <> ": " <> show v
+  valEnv <- globalEnv ast
+  let tyEnv = getTypeEnv ast
+  return (valEnv, tyEnv)
 
-doRepl' :: Environment -> IO ()
+type ReplEnv = (Environment, TypeEnv)
+
+printEnv :: ReplEnv -> IO ()
+printEnv env =
+  let (valEnv, tyEnv) = env
+      -- hack since valEnv maps Name () and tyEnv maps Name Range (which is a mistake)
+      tyEnv' = Map.mapKeys stripAnns tyEnv
+      showBinding (n, v) = case Map.lookup n tyEnv' of
+        Nothing -> getIdent n <> "=" <> show v
+        Just sc -> getIdent n <> "=" <> show v <> " :: " <> show sc
+   in do
+        putStr "{"
+        putStr $ intercalate ", " (map showBinding (assocs valEnv))
+        putStrLn "}"
+
+doRepl' :: ReplEnv -> IO ()
 doRepl' env = do
+  let (valEnv, tyEnv) = env
   putStr "> "
   hFlush stdout
-  expr <- getLine
-  case expr of
+  inp <- getLine
+  case inp of
     "" -> do
       putStrLn "Enter an expression, ':h' for help, or :q to quit"
       doRepl' env
@@ -55,29 +77,34 @@ doRepl' env = do
       putStrLn "  :q - quit"
       putStrLn ""
       doRepl' env
-    _ -> case parseDeclOrExp expr of
-      Right (Right exprAst) ->
-        -- evaluate expression
-        case eval env exprAst of
-          Right val -> do
-            print val
-            doRepl' env
-          Left err -> do
-            putStrLn (showErr err)
-            doRepl' env
-      Right (Left decl) ->
-        -- process decl
-        case insertDecl env (stripAnns decl) of
-          Right env' -> do
-            -- repl in modified environment
-            printEnv env'
-            doRepl' env'
-          Left err -> do
-            putStrLn (showErr err)
-            doRepl' env
+    _ -> case go inp of
+      Right (Right val, ty, env') -> do
+        putStrLn $ show val <> " :: " <> show ty
+        doRepl' env'
+      Right (Left name, ty, env') -> do
+        putStrLn $ getIdent name <> " :: " <> show ty
+        doRepl' env'
       Left err -> do
         putStrLn (showErr err)
         doRepl' env
+      where
+        go :: String -> Either HissError (Either (Name Range) HissValue, Type, ReplEnv)
+        go src = do
+          declOrExp <- parseDeclOrExp src
+          case declOrExp of
+            Right expr -> do
+              -- typecheck expression in current environment
+              expr' <- typecheckEnv tyEnv expr
+              -- eval expression in current environment
+              val <- eval valEnv expr'
+              -- return results with env unchanged
+              return (Right val, getTy expr', env)
+            Left decl -> do
+              decl' <- typecheckEnv tyEnv decl
+              valEnv' <- insertDecl valEnv (stripAnns decl)
+              let tyEnv' = Map.insert (fst <$> declGetName decl') ((generalize emptyEnv . getTy) decl') tyEnv
+              let env' = (valEnv', tyEnv')
+              return (Left $ (declGetName . fmap fst) decl', getTy decl', env')
 
 doRepl :: ReplOptions -> IO ()
 doRepl opts = do

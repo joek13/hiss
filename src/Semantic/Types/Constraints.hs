@@ -5,7 +5,7 @@
   Other referencees:
   - https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system
 -}
-module Semantic.Types.Constraints (runInfer, infer, inferDecl, inferProgram, solve) where
+module Semantic.Types.Constraints (runInfer, infer, inferDecl, inferProgram, solve, generalize) where
 
 import Control.Monad (replicateM)
 import Control.Monad.Except (Except, MonadError (throwError), runExcept)

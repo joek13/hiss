@@ -4,14 +4,15 @@
   For definitions, see Semantic.Types.
   For type inference rules, see Semantic.Types.Constraints.
 -}
-module Semantic.Typechecking (Typecheck (..)) where
+module Semantic.Typechecking (Typecheck (..), getTypeEnv) where
 
 import Data.Bifunctor qualified (second)
+import Data.Map qualified as Map
 import Error (HissError)
-import Semantic.Types (Substitutable (apply), Type (..), TypeEnv, emptyEnv, relabel)
-import Semantic.Types.Constraints (inferDecl, runInfer, solve)
+import Semantic.Types (Substitutable (apply), Type (..), TypeEnv, emptyEnv, getTy, relabel)
+import Semantic.Types.Constraints (generalize, inferDecl, runInfer, solve)
 import Semantic.Types.Constraints qualified as Constraints (infer, inferProgram)
-import Syntax.AST (Annotated, Binding, Decl (..), Expr, Program (..))
+import Syntax.AST (Annotated, Binding, Decl (..), Expr, Program (..), declGetName)
 import Syntax.Lexer (Range)
 
 -- | Typeclass for AST nodes that can be type checked.
@@ -60,3 +61,9 @@ instance Typecheck Program where
     -- relabel all types
     let relabeled = fmap (Data.Bifunctor.second relabel) solved
     return relabeled
+
+-- | Gets a program's global type environment.
+getTypeEnv :: Program (Range, Type) -> TypeEnv
+getTypeEnv (Program _ decls) = Map.fromList (map f decls)
+  where
+    f d = (fmap fst (declGetName d), (generalize emptyEnv . getTy) d)

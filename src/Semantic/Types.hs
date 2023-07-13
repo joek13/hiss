@@ -16,7 +16,10 @@ import Syntax.Lexer (Range)
 
 -- | Hiss type variable.
 newtype Var = Var String
-  deriving (Eq, Show, Ord)
+  deriving (Eq, Ord)
+
+instance Show Var where
+  show (Var s) = s
 
 -- infinite list of type variable names - [a, ..., z, a1, ..., z1, a2, ...]
 varNames :: [String]
@@ -58,7 +61,14 @@ getTy = snd . getAnn
 data Scheme
   = -- | Universal quantifier over zero or more type variables.
     ForAll [Var] Type
-  deriving (Eq, Show)
+  deriving (Eq)
+
+instance Show Scheme where
+  -- unquantified type schemes show as the type itself
+  show (ForAll [] ty) = 
+    show ty
+  show (ForAll vars ty) = 
+    "∀ " <> unwords (map show vars) <> " . " <> show ty
 
 -- | Concrete types.
 data Cons

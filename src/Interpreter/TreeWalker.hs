@@ -5,7 +5,6 @@ module Interpreter.TreeWalker (interp, eval, globalEnv, insertDecl, HissValue (.
 import Control.Monad (foldM, void)
 import Control.Monad.Except (ExceptT, runExceptT, throwError)
 import Control.Monad.State.Lazy (State, evalState, get, put, zipWithM_)
-import Data.List (intercalate)
 import Data.Map (Map)
 import Data.Map qualified as Map (empty, fromList, insert, lookup, restrictKeys, union)
 import Data.Set ((\\))
@@ -42,8 +41,7 @@ instance Show HissValue where
   show (Int x) = show x
   show (Bool True) = "true"
   show (Bool False) = "false"
-  show (Func _ n [] _) = "(function '" <> getIdent n <> "' of ())"
-  show (Func _ n args _) = "(function '" <> getIdent n <> "' of " <> intercalate "," (map getIdent args) <> ")"
+  show (Func _ n _ _) = "(function '" <> getIdent n <> "')"
 
 -- | Table mapping Names to HissValues.
 type Environment = Map (Name ()) HissValue
