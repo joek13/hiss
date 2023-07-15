@@ -76,9 +76,11 @@ doRepl' env = do
       putStrLn ""
       doRepl' env
     _ -> case go inp of
+      -- 'twas an expression
       Right (Right val, ty, env') -> do
         putStrLn $ show val <> " :: " <> show ty
         doRepl' env'
+      -- 'twas a declaration
       Right (Left name, ty, env') -> do
         putStrLn $ getIdent name <> " :: " <> show ty
         doRepl' env'
