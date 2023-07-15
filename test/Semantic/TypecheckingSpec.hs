@@ -54,6 +54,8 @@ spec = do
         infer' "let f(x) = x in f" `shouldBe` Right (TFunc (var "a") (var "a"))
         infer' "let const(c, x) = c in const" `shouldBe` Right (mkCurried (var "a") [var "a", var "b"])
         infer' "let app(f, x) = f(x) in app" `shouldBe` Right (TFunc (TFunc (var "a") (var "b")) (TFunc (var "a") (var "b")))
+      it "monomorphizes value declarations" $ do
+        infer' "let id(x) = x in let g = id in let h = g(0) in let i = g(false) in 42" `shouldBe` Left (SemanticError "Type error: cannot unify types int and bool")
       it "typechecks unary operators" $ do
         infer' "let f(x) = !x in f" `shouldBe` Right (TFunc boolTy boolTy)
       it "typechecks binary operators" $ do

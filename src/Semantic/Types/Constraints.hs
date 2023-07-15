@@ -133,7 +133,7 @@ infer expr = case expr of
       {-
         note that this code means value bindings are always monomorphic, even if you're just declaring a synonym of a polymorphic type.
         e.g., `let f(x) = x in let g = f in let h = g(false) in let i = g(0)` does not typecheck, since h is monomorphic.
-        will possibly have to rethink this limitation.
+        will possibly have to rethink this limitation, but for right now it is enforced by a test in TypecheckingSpec ("monomorphizes value declarations")
       -}
       valExpr' <- infer valExpr
       let valTy = getTy valExpr'
