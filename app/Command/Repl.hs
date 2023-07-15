@@ -2,7 +2,7 @@ module Command.Repl (replOptsParser, doRepl) where
 
 import Command (Command (Repl), ReplOptions (..))
 import Data.List (intercalate)
-import Data.Map qualified as Map (insert, lookup, mapKeys)
+import Data.Map qualified as Map (insert, lookup)
 import Data.Map.Strict (assocs)
 import Error (HissError, showErr)
 import Interpreter.TreeWalker (Environment, HissValue, eval, globalEnv, insertDecl)
@@ -40,9 +40,7 @@ type ReplEnv = (Environment, TypeEnv)
 printEnv :: ReplEnv -> IO ()
 printEnv env =
   let (valEnv, tyEnv) = env
-      -- hack since valEnv maps Name () and tyEnv maps Name Range (which is a mistake)
-      tyEnv' = Map.mapKeys stripAnns tyEnv
-      showBinding (n, v) = case Map.lookup n tyEnv' of
+      showBinding (n, v) = case Map.lookup n tyEnv of
         Nothing -> getIdent n <> "=" <> show v
         Just sc -> getIdent n <> "=" <> show v <> " :: " <> show sc
    in do
@@ -102,7 +100,7 @@ doRepl' env = do
             Left decl -> do
               decl' <- typecheckEnv tyEnv decl
               valEnv' <- insertDecl valEnv (stripAnns decl)
-              let tyEnv' = Map.insert (fst <$> declGetName decl') ((generalize emptyEnv . getTy) decl') tyEnv
+              let tyEnv' = Map.insert ((stripAnns . declGetName) decl') ((generalize emptyEnv . getTy) decl') tyEnv
               let env' = (valEnv', tyEnv')
               return (Left $ (declGetName . fmap fst) decl', getTy decl', env')
 

@@ -65,9 +65,9 @@ data Scheme
 
 instance Show Scheme where
   -- unquantified type schemes show as the type itself
-  show (ForAll [] ty) = 
+  show (ForAll [] ty) =
     show ty
-  show (ForAll vars ty) = 
+  show (ForAll vars ty) =
     "∀ " <> unwords (map show vars) <> " . " <> show ty
 
 -- | Concrete types.
@@ -85,7 +85,7 @@ type Subst = Map Var Type
 
 -- | Typing environment.
 -- Maps variable names to bound type schemes.
-type TypeEnv = Map (Name Range) Scheme
+type TypeEnv = Map (Name ()) Scheme
 
 emptyEnv :: TypeEnv
 emptyEnv = Map.empty

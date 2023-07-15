@@ -27,14 +27,14 @@ import Semantic.Types
     getTy,
     varNames,
   )
-import Syntax.AST (BinOp (..), Binding (..), Decl (..), Expr (..), Name, Program (..), UnaryOp (..), declGetName, getIdent)
+import Syntax.AST (BinOp (..), Binding (..), Decl (..), Expr (..), Name, Program (..), UnaryOp (..), declGetName, getIdent, stripAnns)
 import Syntax.Lexer (Range)
 
 -- | Given a name, looks up its type in current typing environment.
 lookupName :: Name Range -> Infer Type
 lookupName name = do
   env <- ask
-  case Map.lookup name env of
+  case Map.lookup (stripAnns name) env of
     Nothing -> error $ "Compiler bug: lookup called on missing variable " <> getIdent name
     Just scheme -> do
       {-
@@ -74,11 +74,11 @@ fresh = do
   return $ TVar (Var $ varNames !! i) -- index into list of type variable names
 
 -- | Binds a name to a scheme and performs an Infer action in the modified environment.
-bindEnv :: (Name Range, Scheme) -> Infer a -> Infer a
+bindEnv :: (Name (), Scheme) -> Infer a -> Infer a
 bindEnv (name, scheme) = local (Map.insert name scheme)
 
 -- | Binds many names to corresponding type schemes and performs Infer action in the modified environment.
-bindEnvMany :: [(Name Range, Scheme)] -> Infer a -> Infer a
+bindEnvMany :: [(Name (), Scheme)] -> Infer a -> Infer a
 bindEnvMany pairs = local (\e -> foldl (\m (n, s) -> Map.insert n s m) e pairs)
 
 -- | Instantiates a type scheme, replacing its bound variables with fresh type variables.
@@ -139,7 +139,7 @@ infer expr = case expr of
       let valTy = getTy valExpr'
 
       let valSc = ForAll [] valTy
-      inExpr' <- bindEnv (n, valSc) (infer inExpr)
+      inExpr' <- bindEnv (stripAnns n, valSc) (infer inExpr)
       let inTy = getTy inExpr'
 
       -- bindings don't have types, but it needs an annotation - we use unit
@@ -172,7 +172,7 @@ infer expr = case expr of
               -- apply solved constraints and generalize over unconstrained variables
               let scheme = generalize (apply subst env) (apply subst funcTy)
 
-              inExpr' <- bindEnv (funcName, scheme) $ local (apply subst) (infer inExpr)
+              inExpr' <- bindEnv (stripAnns funcName, scheme) $ local (apply subst) (infer inExpr)
               let inTy = getTy inExpr'
 
               -- dummy annotation for binding
@@ -269,6 +269,7 @@ inferBinary _ = error "Compiler bug: inferBinary called on something other than 
 -- infers the type of the function. Returns (inferred function type, typed body expr).
 inferFunc :: Name Range -> [Name Range] -> Expr Range -> Infer (Type, TypedExpr)
 inferFunc funcName argNames defnExpr = do
+  let argNames' = map stripAnns argNames
   -- create fresh type variables for each function argument
   argTys <- replicateM (length argNames) fresh
   let argScs = map (ForAll []) argTys
@@ -276,12 +277,12 @@ inferFunc funcName argNames defnExpr = do
   -- fresh variable for the function type
   funcTy <- fresh
   let funcSc = ForAll [] funcTy
-  let argPairs = zip argNames argScs -- list of (arg name, arg scheme)
+  let argPairs = zip argNames' argScs -- list of (arg name, arg scheme)
 
   -- infer the return type of the function from the body
   defnExpr' <-
     bindEnvMany
-      ((funcName, funcSc) : argPairs) -- include itself since functions can be recursive
+      ((stripAnns funcName, funcSc) : argPairs) -- include itself since functions can be recursive
       (infer defnExpr)
 
   let retTy = getTy defnExpr'
@@ -316,7 +317,7 @@ inferProgram (Program r decls) = do
   bindingTys <- replicateM (length decls) fresh
   let bindingScs = map (ForAll []) bindingTys
 
-  let bindingNames = map declGetName decls
+  let bindingNames = map (stripAnns . declGetName) decls
 
   -- perform binding before inferring individual decls
   bindEnvMany
