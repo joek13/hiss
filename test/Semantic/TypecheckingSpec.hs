@@ -89,5 +89,7 @@ spec = do
     context "Program" $ do
       it "typechecks a program with mutual recursion" $ do
         inferProg' "even(n) = if n == 0 then true else !(odd(n-1)) \n odd(n) = if n == 1 then true else !(even(n-1))" `shouldBe` Right TUnit
+      it "typechecks toplevel polymorphic functions" $ do
+        inferProg' "id(x) = x \n a = id(true) \n b = id(3)" `shouldBe` Right TUnit
       it "rejects a program that is type incorrect" $ do
         inferProg' "f(x) = x + 1 \n main() = f(3) || false" `shouldBe` Left (SemanticError "Type error: cannot unify types int and bool")
