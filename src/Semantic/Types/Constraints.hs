@@ -305,30 +305,51 @@ inferDecl (Decl a binding@(ValBinding {}) defn) = do
 inferDecl (Decl a binding@(FuncBinding _ funcName argNames) defnExpr) = do
   -- binding has type TUnit
   let binding' = fmap (,TUnit) binding
-  (funcTy, defn') <- inferFunc funcName argNames defnExpr
-  -- decl has type of thing declared
-  return $ Decl (a, funcTy) binding' defn'
+  env <- ask
+  ctr <- get
+  case runInfer' ctr env (inferFunc funcName argNames defnExpr) of
+    Left err -> throwError err
+    Right ((funcTy, defnExpr'), ctr', cs) -> do
+      -- update counter so that type vars are unique across all runInfers
+      put ctr'
+      {-
+        propagate constraints in case the sub-inference constrains an existing variable
+        e.g., `add(x) = let inner(y) = x + y in inner` would drop constraint x :: int
+        -}
+      tell cs
+      -- solve function constraints
+      case solve cs of
+        Left err -> throwError err
+        Right subst -> do
+          let funcTy' = apply subst funcTy
+
+          -- decl has type of thing declared
+          return $ Decl (a, funcTy') binding' defnExpr'
 
 -- | Infers type of a program in current typing environment.
 -- Returns type annotated program and emits constraints.
 inferProgram :: Program Range -> Infer (Program (Range, Type))
 inferProgram (Program r decls) = do
-  -- instantiate fresh type variables for each top-level binding
-  bindingTys <- replicateM (length decls) fresh
-  let bindingScs = map (ForAll []) bindingTys
-
-  let bindingNames = map (stripAnns . declGetName) decls
-
-  -- perform binding before inferring individual decls
-  bindEnvMany
-    (zip bindingNames bindingScs)
-    ( do
-        -- infer type of each declaration
-        decls' <- mapM inferDecl decls
-        -- constrain type of declaration to its associated type variable
-        mapM_ (uncurry constrain) (zip (map getTy decls') bindingTys)
-        return $ Program (r, TUnit) decls'
-    )
+  {-
+    processes each decl in order, inferring its type and adding it to the environment for successive decls
+  -}
+  decls' <- doInfer decls
+  return $ Program (r, TUnit) decls'
+  where
+    doInfer (decl@(Decl _ binding _) : ds) = do
+      decl' <- inferDecl decl
+      env <- ask
+      {-
+        just like with let..in expressions, converting from type to scheme is different for val decls and func decls
+        val decls are monomorphic, so we don't generalize
+        inferDecl has already produced the most specialized type it can from the function body, so we can generalize
+      -}
+      let sc = case binding of
+            ValBinding {} -> ForAll [] (getTy decl')
+            FuncBinding {} -> (generalize env . getTy) decl'
+      ds' <- bindEnv ((stripAnns . declGetName) decl, sc) (doInfer ds)
+      return $ decl' : ds'
+    doInfer [] = return []
 
 runInfer :: TypeEnv -> Infer a -> Either HissError (a, [Constraint])
 runInfer env m = do
