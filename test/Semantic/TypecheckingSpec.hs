@@ -89,6 +89,8 @@ spec = do
       it "typechecks a function declaration" $ do
         inferDecl' "f(x) = x + 1" `shouldBe` Right (TFunc intTy intTy)
     context "Program" $ do
+      it "typechecks a program with recursion" $ do
+        inferProg' "fib(n) = if n == 0 then 1 else fib(n) + fib(n-1)" `shouldBe` Right TUnit
       it "typechecks a program with mutual recursion" $ do
         inferProg' "even(n) = if n == 0 then true else !(odd(n-1)) \n odd(n) = if n == 1 then true else !(even(n-1))" `shouldBe` Right TUnit
       it "typechecks toplevel polymorphic functions" $ do
