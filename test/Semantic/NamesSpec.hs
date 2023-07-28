@@ -4,7 +4,7 @@ import Data.Set qualified as Set (fromList)
 import Error
 import Semantic.Names (checkNames, collectNames)
 import Syntax (parseExpression, parseProgram)
-import Syntax.AST (Expr, Name (..), Program, declGetName, progDecls, stripAnns)
+import Syntax.AST (Expr, Name (..), Program)
 import Syntax.Lexer (AlexPosn (..), Range (..))
 import Test.Hspec (Spec, describe, it, shouldBe)
 import Util (fromRight)
@@ -27,15 +27,6 @@ prog3 = fromRight $ parseProgram "f(x) = x \n f(x) = x + 1"
 prog4 :: Program Range
 prog4 = fromRight $ parseProgram "x = 1 \n x = 2"
 
-prog5 :: Program Range -- simple cyclic program
-prog5 = fromRight $ parseProgram "a = b \n b = c \n c = a"
-
-prog6 :: Program Range -- cyclic program containing functions
-prog6 = fromRight $ parseProgram "a = f() \n f() = a"
-
-prog7 :: Program Range -- acyclic program with mutually recursive functions
-prog7 = fromRight $ parseProgram "f() = g() + a \n g() = f() + b \n a = 1 \n b = 1"
-
 spec :: Spec
 spec = do
   describe "collectNames" $ do
@@ -45,8 +36,6 @@ spec = do
       collectNames exp2 `shouldBe` Set.fromList [Name (Range (AlexPn 17 1 18) (AlexPn 18 1 19)) "f", Name (Range (AlexPn 12 1 13) (AlexPn 13 1 14)) "z"]
   describe "checkNames" $ do
     it "hoists top-level declarations" $
-      -- i.e., you can use "y" in the definition of "x" even though "y" is declared after
-
       -- i.e., you can use "y" in the definition of "x" even though "y" is declared after
       checkNames prog1 `shouldBe` Right prog1
     it "does not allow use of function arguments outside function" $
