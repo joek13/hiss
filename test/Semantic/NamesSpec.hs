@@ -2,7 +2,7 @@ module Semantic.NamesSpec (spec) where
 
 import Data.Set qualified as Set (fromList)
 import Error
-import Semantic.Names (checkNames, collectNames, reorderDecls)
+import Semantic.Names (checkNames, collectNames)
 import Syntax (parseExpression, parseProgram)
 import Syntax.AST (Expr, Name (..), Program, declGetName, progDecls, stripAnns)
 import Syntax.Lexer (AlexPosn (..), Range (..))
@@ -55,16 +55,3 @@ spec = do
       checkNames prog3 `shouldBe` Left (SemanticError "Name error: Global 'f' redeclared at line 2, column 2")
     it "emits error on redeclaration of value" $
       checkNames prog4 `shouldBe` Left (SemanticError "Name error: Global 'x' redeclared at line 2, column 2")
-  describe "reorderDecls" $ do
-    it "emits error on a simple value cycle" $
-      reorderDecls prog5 `shouldBe` Left (SemanticError "Definition of 'a' at line 1, column 1 is cyclic")
-    it "emits error on a value cycle through a function" $
-      reorderDecls prog6 `shouldBe` Left (SemanticError "Definition of 'a' at line 1, column 1 is cyclic")
-    it "correctly re-orders declarations of a program with mutually recursive functions" $
-      map (stripAnns . declGetName) <$> (progDecls <$> reorderDecls prog7)
-        `shouldBe` Right
-          [ Name () "b",
-            Name () "a",
-            Name () "f",
-            Name () "g"
-          ]
