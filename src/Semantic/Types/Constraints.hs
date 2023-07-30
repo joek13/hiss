@@ -7,13 +7,14 @@
 -}
 module Semantic.Types.Constraints (runInfer, infer, inferDecl, inferProgram, solve, generalize) where
 
-import Control.Monad (replicateM)
+import Control.Monad (replicateM, zipWithM_)
 import Control.Monad.Except (Except, MonadError (throwError), runExcept)
 import Control.Monad.RWS (MonadReader (ask, local), MonadState (get, put), MonadWriter (tell), RWST (runRWST), gets, modify)
 import Control.Monad.State (StateT (runStateT))
 import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Error (HissError (SemanticError))
+import Semantic.Dependencies
 import Semantic.Types
   ( Cons (CBool, CInt),
     Scheme (..),
@@ -27,7 +28,7 @@ import Semantic.Types
     getTy,
     varNames,
   )
-import Syntax.AST (BinOp (..), Binding (..), Decl (..), Expr (..), Name, Program (..), UnaryOp (..), declGetName, getIdent, stripAnns)
+import Syntax.AST (Annotated (getAnn), BinOp (..), Binding (..), Decl (..), Expr (..), Name, Program (..), UnaryOp (..), declGetName, getIdent, stripAnns)
 import Syntax.Lexer (Range)
 
 -- | Given a name, looks up its type in current typing environment.
@@ -293,16 +294,43 @@ inferFunc funcName argNames defnExpr = do
 
   return (funcTy, defnExpr')
 
--- | Infers type of a decl in current typing environment.
--- Returns type annotated decl and emits constraints.
+-- | Infers a value declaration, or a polymorphic func declaration.
 inferDecl :: Decl Range -> Infer (Decl (Range, Type))
-inferDecl (Decl a binding@(ValBinding {}) defn) = do
+inferDecl decl@(Decl _ (ValBinding {}) _) = inferValDecl decl
+inferDecl decl@(Decl _ (FuncBinding {}) _) = inferFuncDeclPoly decl
+
+-- | Infers type of a value declaration.
+--   Compiler bug if a function declaration is provided.
+inferValDecl :: Decl Range -> Infer (Decl (Range, Type))
+inferValDecl (Decl a binding@(ValBinding {}) defn) = do
   -- binding has type TUnit
   let binding' = fmap (,TUnit) binding
   defn' <- infer defn
   -- decl has type of thing declared
   return $ Decl (a, getTy defn') binding' defn'
-inferDecl (Decl a binding@(FuncBinding _ funcName argNames) defnExpr) = do
+inferValDecl _ = error "Compiler bug: inferValDecl called on something other than a value decl"
+
+-- | Infers type of a function declaration monomorphically.
+--   I.e., without trying to solve and generalize over constrained variables.
+--   Compiler bug if a value declaration is provided.
+inferFuncDeclMono :: Decl Range -> Infer (Decl (Range, Type))
+inferFuncDeclMono (Decl a binding@(FuncBinding _ funcName argNames) defnExpr) = do
+  -- binding has type TUnit
+  let binding' = fmap (,TUnit) binding
+
+  -- infer function type monomorphically
+  (funcTy, defnExpr') <- inferFunc funcName argNames defnExpr
+
+  -- return annotated tree
+  return $ Decl (a, funcTy) binding' defnExpr'
+inferFuncDeclMono _ = error "Compiler bug: inferFuncDeclPoly called on something other than a func decl"
+
+-- | Infers type of a function declaration polymorphically.
+--   Runs a "sub-inference" to solve any constrained variables in the function's definition.
+--   Other variables are left free and can be generalized to produce a polymorphic function.
+--   Compiler bug if a value declaration is provided.
+inferFuncDeclPoly :: Decl Range -> Infer (Decl (Range, Type))
+inferFuncDeclPoly (Decl a binding@(FuncBinding _ funcName argNames) defnExpr) = do
   -- binding has type TUnit
   let binding' = fmap (,TUnit) binding
   env <- ask
@@ -325,31 +353,61 @@ inferDecl (Decl a binding@(FuncBinding _ funcName argNames) defnExpr) = do
 
           -- decl has type of thing declared
           return $ Decl (a, funcTy') binding' defnExpr'
+inferFuncDeclPoly _ = error "Compiler bug: inferFuncDeclPoly called on something other than a func decl"
 
 -- | Infers type of a program in current typing environment.
 -- Returns type annotated program and emits constraints.
 inferProgram :: Program Range -> Infer (Program (Range, Type))
-inferProgram (Program r decls) = do
+inferProgram prog = do
   {-
-    processes each decl in order, inferring its type and adding it to the environment for successive decls
+    complexity here because our type system does not permit polymorphic, mutually recursive functions.
+    this is to keep the implementation simple and because, i think, the type system would be undecidable otherwise.
+    (see https://suif.stanford.edu/~brm/reading/p253-henglein.pdf)
+
+    our solution is to group into mutually dependent sets and handle two cases separately:
+    1. singleton groups: decls for values, nonrecursive functions, and non-mutually recursive functions
+    2. groups with >= 2 decls: decls for mutually recursive functions
+
+    in the first case, we can proceed typing the decl as usual: infer the type of x, bind x to the inferred type, continue
+    in the second case, we introduce fresh type variables for each decl in the group (forces them to be monomorphic), infer
+      the type of each function, and then constrain inferred type to be same as the type variable
   -}
-  decls' <- doInfer decls
-  return $ Program (r, TUnit) decls'
+  -- group decls according to dependency graph
+  let declGroups = groupDecls prog
+  -- process each group in order, inferring type and adding to environment
+  declGroups' <- doInferGroups declGroups
+  -- return the type annotated program
+  return $ Program (getAnn prog, TUnit) (concat declGroups')
   where
-    doInfer (decl@(Decl _ binding _) : ds) = do
+    -- singleton decl group: no mutual recursion
+    doInferGroups ([decl@(Decl _ binding _)] : groups) = do
       decl' <- inferDecl decl
       env <- ask
-      {-
-        just like with let..in expressions, converting from type to scheme is different for val decls and func decls
-        val decls are monomorphic, so we don't generalize
-        inferDecl has already produced the most specialized type it can from the function body, so we can generalize
-      -}
       let sc = case binding of
             ValBinding {} -> ForAll [] (getTy decl')
             FuncBinding {} -> (generalize env . getTy) decl'
-      ds' <- bindEnv ((stripAnns . declGetName) decl, sc) (doInfer ds)
-      return $ decl' : ds'
-    doInfer [] = return []
+      groups' <- bindEnv ((stripAnns . declGetName) decl, sc) (doInferGroups groups)
+      return $ [decl'] : groups'
+    -- >= 2 mutually recursive functions
+    doInferGroups (group : groups) = do
+      -- create type variables for each function
+      groupTys <- replicateM (length group) fresh
+      let groupScs = map (ForAll []) groupTys
+
+      -- list of [(name, scheme)]
+      let funcNames = map (stripAnns . declGetName) group
+      let funcScPairs = zip funcNames groupScs
+
+      -- note: compiler bug if we give inferFuncDeclMono a val decl
+      -- however if we run Semantic.Dependencies.reorderDecls first programs with mutually recursive values are thrown out
+      group' <- bindEnvMany funcScPairs (mapM inferFuncDeclMono group)
+      let funcTys = map getTy group'
+
+      zipWithM_ constrain groupTys funcTys
+
+      groups' <- bindEnvMany funcScPairs (doInferGroups groups)
+      return $ group' : groups'
+    doInferGroups [] = return []
 
 runInfer :: TypeEnv -> Infer a -> Either HissError (a, [Constraint])
 runInfer env m = do
