@@ -1,45 +1,26 @@
-# hiss
-Hiss is a hobby functional programming language.
+# hiss compiler
+Hiss is my WIP hobby functional programming language. 
+Read more about Hiss features and design goals on [my personal website](https://kerrigan.dev/hiss).
 
-## Features
-- [x] Simple Haskell-like syntax
-- [x] First-class functions
-- [x] Simple tree-walk interpreter (see [src/Interpreter/TreeWalker.hs](src/Interpreter/TreeWalker.hs))
-- [x] Lexical closures and partial function application
-- [ ] Semantic pass
+This repository contains the source code for the Hiss compiler `hissc`.
+
+## Progress
+- [x] Parser/lexer
+- [ ] Semantic passes
     - [x] Name checker
-    - [ ] Type checker
-- [ ] Compiles to machine code
-    - [ ] Lazy evaluation (maybe)
+    - [x] Dependency checker
+    - [ ] Type checker (see [#8](https://github.com/joek13/hiss/pull/8))
+- [x] Simple tree-walk interpreter
+- [ ] Codegen
 
-## Sample
-A simple Hiss program, [collatz.hiss](samples/collatz.hiss):
-```
-// computes k mod n
-mod(n, k) = if k < n
-            then k
-            else mod(n, k-n)
-
-// partial function application
-mod2 = mod(2)
-
-// computes stopping time of n
-collatz(n, steps) = if n == 1
-                    then steps
-                    else if mod2(n) == 0
-                         then collatz(n/2, steps + 1)
-                         else collatz(3*n + 1, steps + 1)
-
-// should output 111
-main() = collatz(27, 0)
-```
-(syntax is subject to change)
 ## Commands
 ```bash
 # build the project
 stack build
 # interpret a hiss program
 stack run -- eval samples/collatz.hiss
+# start a hiss REPL
+stack run -- repl samples/collatz.hiss
 # run unit tests
 stack test
 ```
