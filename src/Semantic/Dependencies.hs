@@ -3,7 +3,7 @@
     2. Semantic pass to detect value cycles.
 -}
 
-module Semantic.Dependencies (reorderDecls) where
+module Semantic.Dependencies (reorderDecls, groupDecls) where
 
 import Data.Foldable (find)
 import Data.Foldable qualified as Foldable (toList)
