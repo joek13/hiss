@@ -9,7 +9,7 @@ This repository contains the source code for the Hiss compiler `hissc`.
 - [ ] Semantic passes
     - [x] Name checker
     - [x] Dependency checker
-    - [ ] Type checker (see [#8](https://github.com/joek13/hiss/pull/8))
+    - [x] Type checker
 - [x] Simple tree-walk interpreter
 - [ ] Codegen
 
