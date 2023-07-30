@@ -4,7 +4,8 @@ import Command (Command (Eval), EvalOptions (..))
 import Error (HissError, showErr)
 import Interpreter.TreeWalker (HissValue, interp)
 import Options.Applicative (Parser, ParserInfo, argument, help, helper, info, metavar, progDesc, str, (<**>))
-import Semantic.Names (checkNames, reorderDecls)
+import Semantic.Dependencies (reorderDecls)
+import Semantic.Names (checkNames)
 import Syntax (parseProgram)
 
 parser :: Parser Command
