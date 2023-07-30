@@ -31,6 +31,9 @@ library
       Semantic.Dependencies
       Semantic.Entrypoint
       Semantic.Names
+      Semantic.Typechecking
+      Semantic.Types
+      Semantic.Types.Constraints
       Syntax
       Syntax.AST
       Syntax.Lexer
@@ -42,6 +45,7 @@ library
   default-extensions:
       ImportQualifiedPost
       DeriveFunctor
+      DeriveFoldable
       FlexibleInstances
       TupleSections
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
@@ -67,6 +71,7 @@ executable hissc
   default-extensions:
       ImportQualifiedPost
       DeriveFunctor
+      DeriveFoldable
       FlexibleInstances
       TupleSections
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
@@ -84,6 +89,8 @@ test-suite hiss-test
       Semantic.DependenciesSpec
       Semantic.EntrypointSpec
       Semantic.NamesSpec
+      Semantic.TypecheckingSpec
+      Semantic.TypesSpec
       Syntax.ASTSpec
       Syntax.LexerSpec
       Syntax.ParserSpec
@@ -94,6 +101,7 @@ test-suite hiss-test
   default-extensions:
       ImportQualifiedPost
       DeriveFunctor
+      DeriveFoldable
       FlexibleInstances
       TupleSections
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
