@@ -4,7 +4,7 @@ import Command (Command (Repl), ReplOptions (..))
 import Data.List (intercalate)
 import Data.Map qualified as Map (insert, keys, lookup)
 import Data.Map.Strict (assocs)
-import Data.Set qualified as Set (fromList)
+import Data.Set qualified as Set (fromList, insert)
 import Error (HissError, showErr)
 import Interpreter.TreeWalker (Environment, HissValue, eval, globalEnv, insertDecl)
 import Options.Applicative (Parser, ParserInfo, argument, help, helper, info, metavar, progDesc, str, (<**>))
@@ -92,12 +92,13 @@ doRepl' env = do
         go :: String -> Either HissError (Either (Name Range) HissValue, Type, ReplEnv)
         go src = do
           declOrExp <- parseDeclOrExp src
+          -- since we're missing range information, just attach a dummy range
+          let globals = Set.fromList $ map (fmap (const dummyRange)) $ Map.keys valEnv
           case declOrExp of
             Right expr -> do
               -- check that names we use are declared
               runNameCheck
-                -- since we're missing range information, just attach a dummy range
-                (Set.fromList $ map (fmap (const dummyRange)) $ Map.keys valEnv)
+                globals
                 (exprCheckNames expr)
               -- typecheck expression in current environment
               expr' <- typecheckEnv tyEnv expr
@@ -106,16 +107,13 @@ doRepl' env = do
               -- return results with env unchanged
               return (Right val, getTy expr', env)
             Left decl -> do
-              runNameCheck
-                (Set.fromList $ map (fmap (const dummyRange)) $ Map.keys valEnv)
-                ( do
-                    throwIfShadowsGlobal $ declGetName decl -- check that we do not shadow an existing global
-                    declCheckNames decl -- and that names we use are declared
-                )
+              -- check that we do not shadow existing globals
+              runNameCheck globals (throwIfShadowsGlobal $ declGetName decl)
+              -- and that all names are defined
+              runNameCheck (Set.insert (declGetName decl) globals) (declCheckNames decl)
               -- typecheck decl in current env
               decl' <- typecheckEnv tyEnv decl
-              -- add decl to current environment
-              -- TODO: evaluate now??
+              -- add decl to current environment and evaluate
               valEnv' <- insertDecl valEnv (stripAnns decl)
               -- add type of decl to typing environment
               let tyEnv' = Map.insert ((stripAnns . declGetName) decl') ((generalize emptyEnv . getTy) decl') tyEnv
