@@ -2,19 +2,20 @@ module Command.Repl (replOptsParser, doRepl) where
 
 import Command (Command (Repl), ReplOptions (..))
 import Data.List (intercalate)
-import Data.Map qualified as Map (insert, lookup)
+import Data.Map qualified as Map (insert, keys, lookup)
 import Data.Map.Strict (assocs)
+import Data.Set qualified as Set (fromList)
 import Error (HissError, showErr)
 import Interpreter.TreeWalker (Environment, HissValue, eval, globalEnv, insertDecl)
 import Options.Applicative (Parser, ParserInfo, argument, help, helper, info, metavar, progDesc, str, (<**>))
 import Semantic.Dependencies (reorderDecls)
-import Semantic.Names (checkNames)
+import Semantic.Names (checkNames, declCheckNames, exprCheckNames, runNameCheck, throwIfShadowsGlobal)
 import Semantic.Typechecking (Typecheck (..), getTypeEnv)
 import Semantic.Types (Type, TypeEnv, emptyEnv, getTy)
 import Semantic.Types.Constraints (generalize)
 import Syntax (parseDeclOrExp, parseProgram)
 import Syntax.AST (Name (..), declGetName, getIdent, stripAnns)
-import Syntax.Lexer (Range)
+import Syntax.Lexer (AlexPosn (..), Range (..))
 import System.IO (hFlush, stdout)
 
 parser :: Parser Command
@@ -93,6 +94,11 @@ doRepl' env = do
           declOrExp <- parseDeclOrExp src
           case declOrExp of
             Right expr -> do
+              -- check that names we use are declared
+              runNameCheck
+                -- since we're missing range information, just attach a dummy range
+                (Set.fromList $ map (fmap (const dummyRange)) $ Map.keys valEnv)
+                (exprCheckNames expr)
               -- typecheck expression in current environment
               expr' <- typecheckEnv tyEnv expr
               -- eval expression in current environment
@@ -100,8 +106,18 @@ doRepl' env = do
               -- return results with env unchanged
               return (Right val, getTy expr', env)
             Left decl -> do
+              runNameCheck
+                (Set.fromList $ map (fmap (const dummyRange)) $ Map.keys valEnv)
+                ( do
+                    throwIfShadowsGlobal $ declGetName decl -- check that we do not shadow an existing global
+                    declCheckNames decl -- and that names we use are declared
+                )
+              -- typecheck decl in current env
               decl' <- typecheckEnv tyEnv decl
+              -- add decl to current environment
+              -- TODO: evaluate now??
               valEnv' <- insertDecl valEnv (stripAnns decl)
+              -- add type of decl to typing environment
               let tyEnv' = Map.insert ((stripAnns . declGetName) decl') ((generalize emptyEnv . getTy) decl') tyEnv
               let env' = (valEnv', tyEnv')
               return (Left $ (declGetName . fmap fst) decl', getTy decl', env')
@@ -115,3 +131,6 @@ doRepl opts = do
       putStrLn $ "Loaded file " <> fileName
       doRepl' env
     Left err -> putStrLn (showErr err)
+
+dummyRange :: Range
+dummyRange = Range (AlexPn 0 0 0) (AlexPn 0 0 0)

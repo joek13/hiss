@@ -1,4 +1,4 @@
-module Semantic.Names (collectNames, checkNames) where
+module Semantic.Names (collectNames, checkNames, exprCheckNames, declCheckNames, runNameCheck, throwIfShadowsGlobal) where
 
 import Control.Monad (unless, when)
 import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT)
@@ -22,20 +22,17 @@ collectNames (ELetIn _ _ e1 e2) = collectNames e1 `Set.union` collectNames e2
 collectNames (EIf _ e1 e2 e3) = collectNames e1 `Set.union` collectNames e2 `Set.union` collectNames e3
 collectNames (EParen _ e1) = collectNames e1
 
--- | Name-checks a program.
+runNameCheck :: Set (Name Range) -> NameCheck a -> Either HissError a
+runNameCheck gs m =
+  let ctx = NameCheckCtx {globals = gs, declared = gs}
+   in evalState (runExceptT m) ctx
+
 -- Returns an error if a global is declared more than once, a binding shadows a global, or an undeclared name is used.
 -- On success, returns the program unchanged.
 checkNames :: Program Range -> Either HissError (Program Range)
 checkNames prog = do
-  -- initialize name check ctx
   gs <- progGlobals prog
-  let ctx =
-        NameCheckCtx
-          { globals = gs,
-            declared = gs
-          }
-  -- actually run name check
-  evalState (runExceptT $ progCheckNames prog) ctx
+  runNameCheck gs (progCheckNames prog)
   -- return program unchanged
   return prog
 
