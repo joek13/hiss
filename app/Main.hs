@@ -3,6 +3,7 @@ module Main (main) where
 import Command (Command (..))
 import Command.Eval (doEval, evalOptsParser)
 import Command.Repl (doRepl, replOptsParser)
+import Command.Codegen (doCodegen, codegenOptsParser)
 import Options.Applicative (Parser, ParserInfo, command, execParser, fullDesc, header, helper, info, progDesc, subparser, (<**>))
 
 -- Global hissc options.
@@ -14,6 +15,7 @@ optsParser' =
     <$> subparser
       ( command "eval" evalOptsParser
           <> command "repl" replOptsParser
+          <> command "codegen" codegenOptsParser
       )
 
 optsParser :: ParserInfo Options
@@ -28,3 +30,4 @@ main = do
   case optCommand opts of
     Eval evalOpts -> doEval evalOpts
     Repl replOpts -> doRepl replOpts
+    Codegen codegenOpts -> doCodegen codegenOpts

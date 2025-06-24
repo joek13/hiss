@@ -39,6 +39,7 @@ default-extensions:
 - DeriveFoldable
 - FlexibleInstances
 - TupleSections
+- NamedFieldPuns
 
 library:
   source-dirs: src
