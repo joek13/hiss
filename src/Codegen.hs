@@ -135,9 +135,6 @@ instance Emitter BinOp where
   emit Div = emitInstr IDiv
   emit _ = error "compiler bug: unimplemented"
 
-collectGlobals :: [Decl Type]  -> [Name Type]
-collectGlobals = map declGetName
-
 setLocals :: [Name Type] -> Emit ()
 setLocals ls = do
   ctx <- get

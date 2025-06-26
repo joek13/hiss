@@ -10,7 +10,7 @@ import Control.Monad (forM_)
 import Control.Monad.Reader (ReaderT (runReaderT), MonadReader (ask))
 import Data.List (elemIndex)
 import Error (HissError)
-import Syntax.AST (Program (Program))
+import Syntax.AST (Program)
 import Semantic.Types (Type)
 
 -- | An assembled program.
