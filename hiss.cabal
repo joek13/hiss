@@ -25,9 +25,11 @@ source-repository head
 
 library
   exposed-modules:
-      Assembly
-      Bytecode
       Codegen
+      Codegen.Assembly
+      Codegen.Bytecode
+      Codegen.Emit
+      Codegen.Program
       Error
       Interpreter.TreeWalker
       Lib

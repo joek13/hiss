@@ -1,40 +1,23 @@
-module Assembly (assemble, writeAssembly) where
+{-
+  Print program bytecode using .hissa format.
+-}
 
-import Bytecode ( Const (Int, Bool, Func), Instr (..), Comparison (..) )
-import Codegen (Block (Block), codegen)
-import qualified Codegen ( Block (label, code) )
-import Data.Set (Set)
-import qualified Data.Set as Set
+module Codegen.Assembly (writeAssembly) where
+
+import Codegen.Program (Program (..))
+import Codegen.Bytecode (Instr (..), Comparison (..), Const (..))
+import Codegen.Emit (Block(..))
+import Error (HissError)
+import Control.Monad.Reader (ReaderT (runReaderT), MonadReader (ask))
 import Control.Monad.Writer.Lazy (Writer, execWriter, MonadWriter (tell))
 import Control.Monad (forM_)
-import Control.Monad.Reader (ReaderT (runReaderT), MonadReader (ask))
 import Data.List (elemIndex)
-import Error (HissError)
-import Syntax.AST (Program)
-import Semantic.Types (Type)
 
--- | An assembled program.
-data Assembly = Assembly { constants :: [Const], blocks :: [Block] }
-
--- | Finds unique constants in the provided blocks.
-collectConstants :: [Block] -> Set Const
-collectConstants = foldl f Set.empty
-    where f consts block = consts `Set.union` collectConstants' (Codegen.code block)
-
-collectConstants' :: [Instr] -> Set Const
-collectConstants' = foldl f Set.empty
-    where f consts instr = consts `Set.union` collectConstant instr
-
-collectConstant :: Instr -> Set Const
-collectConstant (PushC c) = Set.singleton c
-collectConstant _ = Set.empty
-
--- | Writes out an assembly in .hissa format. This isn't expected to fail, but it returns Either for consistency with other passes.
-writeAssembly :: Assembly -> Either HissError [String]
+writeAssembly :: Program -> Either HissError [String]
 writeAssembly asm = Right $ execWriter $ runReaderT writeAssembly' asm
 
--- | 'Assemble a' represents an action that can read the current assembly, emit some Hiss assembly code, and return a value of type a.
-type Assemble a = ReaderT Assembly (Writer [String]) a
+-- | 'Assemble a' represents an action that can read the current program, emit some Hiss assembly code, and return a value of type a.
+type Assemble a = ReaderT Program (Writer [String]) a
 
 writeLine :: String -> Assemble ()
 writeLine = tell.pure
@@ -44,15 +27,15 @@ indent = ("\t"<>)
 
 writeAssembly' :: Assemble ()
 writeAssembly' = do
-    asm <- ask
+    prog <- ask
     -- Write program constants.
     writeLine ".constants {"
-    forM_ (constants asm) writeConstant
+    forM_ (constants prog) writeConstant
     writeLine "}"
     writeLine ""
     -- Write program code.
     writeLine ".code {"
-    forM_ (blocks asm) writeBlock
+    forM_ (blocks prog) writeBlock
     writeLine "}"
 
 writeConstant :: Const -> Assemble ()
@@ -62,7 +45,7 @@ writeConstant (Bool False) = writeLine $ indent "hint 0"
 writeConstant (Func arity label) = writeLine $ indent $ "hfunc " <> show arity <> " $" <> label
 
 writeBlock :: Block -> Assemble ()
-writeBlock Block { Codegen.label, Codegen.code } = do
+writeBlock Block { label, code } = do
     writeLine $ label <> ":"
     forM_ code writeInstr
 
@@ -72,9 +55,9 @@ writeInstr i = f i >>= writeLine . indent
         f :: Instr -> Assemble String
         f NoOp = pure "noop"
         f (PushC c) = do
-            asm <- ask
+            prog <- ask
             -- Find index of this constant in the constant table
-            let constIdx = elemIndex c $ constants asm
+            let constIdx = elemIndex c $ constants prog
             case constIdx of
                 Just idx -> pure $ "pushc " <> show idx
                 Nothing -> error $ "compiler bug: cannot find constant " <> show c
@@ -101,15 +84,3 @@ writeInstr i = f i >>= writeLine . indent
         f (ICmp Gt) = pure "icmp gt"
         f (ICmp GEq) = pure "icmp geq"
         f Print = pure "print"
-
--- Constant for the initializer function.
-initConst :: Const
-initConst = Func 0 "_init"
-
--- | Assembles a program.
-assemble :: Program Type -> Either HissError Assembly
-assemble program = 
-    let bs = reverse $ codegen program
-        cs = (Set.toAscList . collectConstants) bs
-    in
-        Right $ Assembly { constants = initConst:cs, blocks = bs }

@@ -7,7 +7,8 @@ import Semantic.Dependencies (reorderDecls)
 import Semantic.Names (checkNames)
 import Semantic.Typechecking (Typecheck (..))
 import Syntax (parseProgram)
-import Assembly (assemble, writeAssembly)
+import Codegen (codegen)
+import Codegen.Assembly (writeAssembly)
 import Control.Monad (forM_ )
 
 parser :: Parser Command
@@ -21,7 +22,7 @@ doCodegen' source = parseProgram source -- parse/lex program
       >>= checkNames
       >>= reorderDecls
       >>= typecheck
-      >>= assemble . fmap snd
+      >>= codegen . fmap snd
       >>= writeAssembly
 
 doCodegen :: CodegenOptions -> IO ()

@@ -1,4 +1,8 @@
-module Bytecode (Label, Instr (..), Comparison (..), Const (..)) where 
+{-
+  Instructions and values used in Hiss bytecode.
+-}
+
+module Codegen.Bytecode (Label, Instr (..), Comparison (..), Const (..)) where 
 
 type Label = String
 
@@ -26,6 +30,7 @@ data Instr
   | Print
   deriving Show
 
+-- | Supported integer comparisons.
 data Comparison =
     Eq
     | NEq
@@ -35,6 +40,7 @@ data Comparison =
     | GEq
     deriving Show
 
+-- | Supported constants.
 data Const =
     Int Int
     | Bool Bool
