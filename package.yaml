@@ -48,6 +48,8 @@ library:
   - base
   - mtl
   - containers
+  - binary
+  - bytestring
   build-tools:
   - alex
   - happy
@@ -62,6 +64,7 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - hiss
+    - bytestring
     - containers
     - optparse-applicative
 

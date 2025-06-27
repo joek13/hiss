@@ -40,8 +40,6 @@ writeAssembly' = do
 
 writeConstant :: Const -> Assemble ()
 writeConstant (Int i) = writeLine $ indent $ "hint " <> show i
-writeConstant (Bool True) = writeLine $ indent "hint 1"
-writeConstant (Bool False) = writeLine $ indent "hint 0"
 writeConstant (Func arity label) = writeLine $ indent $ "hfunc " <> show arity <> " $" <> label
 
 writeBlock :: Block -> Assemble ()

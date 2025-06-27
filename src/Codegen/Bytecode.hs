@@ -43,6 +43,5 @@ data Comparison =
 -- | Supported constants.
 data Const =
     Int Int
-    | Bool Bool
     | Func Int Label
     deriving (Eq, Ord, Show)

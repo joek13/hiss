@@ -71,7 +71,8 @@ emitLoad n = do
 instance Emitter (Expr Type) where
   -- Literal expressions: push a constant to the stack.
   emit (EInt _ i) = emitInstr $ PushC $ Int $ fromIntegral i
-  emit (EBool _ b) = emitInstr $ PushC $ Bool b
+  emit (EBool _ True) = emitInstr $ PushC $ Int 1
+  emit (EBool _ False) = emitInstr $ PushC $ Int 0
   -- Variable reference
   emit (EVar _ n) = emitLoad n
   -- Function application

@@ -8,8 +8,9 @@ import Semantic.Names (checkNames)
 import Semantic.Typechecking (Typecheck (..))
 import Syntax (parseProgram)
 import Codegen (codegen)
-import Codegen.Assembly (writeAssembly)
-import Control.Monad (forM_ )
+import Assembler (assemble)
+import qualified Data.ByteString as B
+
 
 parser :: Parser Command
 parser = Codegen . CodegenOptions <$> argument str (metavar "FILE" <> help "Source Hiss program")
@@ -17,18 +18,18 @@ parser = Codegen . CodegenOptions <$> argument str (metavar "FILE" <> help "Sour
 codegenOptsParser :: ParserInfo Command
 codegenOptsParser = info (parser <**> helper) (progDesc "Perform codegen for a Hiss program")
 
-doCodegen' :: String -> Either HissError [String]
+doCodegen' :: String -> Either HissError B.ByteString
 doCodegen' source = parseProgram source -- parse/lex program
       >>= checkNames
       >>= reorderDecls
       >>= typecheck
       >>= codegen . fmap snd
-      >>= writeAssembly
+      >>= assemble
 
 doCodegen :: CodegenOptions -> IO ()
 doCodegen opts = do
   let fileName = codegenSourceFile opts
   source <- readFile fileName
   case doCodegen' source of
-    Right value -> forM_ value putStrLn
+    Right bin -> B.writeFile "output.hissc" bin
     Left err -> print $ showErr err
