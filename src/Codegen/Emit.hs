@@ -5,7 +5,7 @@
 module Codegen.Emit (Block (..), emitCode) where
 
 import Syntax.AST (Expr (..), Decl (Decl), Program (Program), Binding (..), Name, getIdent, UnaryOp (..), BinOp (..), declGetName)
-import Control.Monad.State.Lazy (State, MonadState (get, put), execState)
+import Control.Monad.State.Lazy (State, MonadState (get, put), execState, modify)
 import Semantic.Types (Type)
 import Data.List (elemIndex, find)
 import Control.Monad (forM_)
@@ -56,6 +56,12 @@ beginBlock label = do
   ctx <- get
   put ctx { blocks=mkBlock label:blocks ctx }
 
+appendLocal :: Name Type -> Emit ()
+appendLocal n = modify $ \ctx -> ctx { locals = locals ctx ++ [n] }
+
+dropLocal :: Emit ()
+dropLocal = modify $ \ctx -> ctx { locals = (reverse . drop 1 . reverse) (locals ctx) }
+
 emitLoad :: Name Type -> Emit ()
 emitLoad n = do
     ctx <- get
@@ -97,7 +103,22 @@ instance Emitter (Expr Type) where
     emit expr1
     -- Emit code for the operator
     emit op
-  emit (ELetIn _ (ValBinding _ _) _ _) = error "compiler bug: let..in does not generate code"
+  emit (ELetIn _ (ValBinding _ n) valExpr inExpr) = do
+    {-
+      this implementation isn't correct:
+      1. it only handles the case where let..in is used in function preamble
+         (it gets screwed up if there are any temporaries on the stack)
+      2. it doesn't properly handle shadowing of locals
+      we should come up with a better solution.
+    -}
+    -- compute valExpr
+    emit valExpr
+    -- declare the local in our environment
+    appendLocal n
+    -- compute inExpr
+    emit inExpr
+    -- remove the local from our environment
+    dropLocal
   emit (EIf _ condExpr thenExpr elseExpr) = do
     -- Evaluate condition
     emit condExpr
