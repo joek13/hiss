@@ -9,7 +9,7 @@ import Control.Monad.State.Lazy (State, MonadState (get, put), execState)
 import Semantic.Types (Type)
 import Data.List (elemIndex, find)
 import Control.Monad (forM_)
-import Codegen.Bytecode ( Instr(..), Label, Const (..) )
+import Codegen.Bytecode ( Instr(..), Label, Const (..), Comparison (..) )
 import Data.Maybe (fromJust)
 
 data Block = Block { label :: Label, code :: [Instr] }
@@ -130,13 +130,29 @@ instance Emitter UnaryOp where
     emitInstr $ PushC $ Int 1
     emitInstr ISub
 
+emitCmp :: Comparison -> Emit ()
+emitCmp cmp = do -- a ?? b
+  emitInstr ISub -- a ?? b <=> a - b ?? 0
+  emitInstr $ ICmp cmp -- emit cmoparison
+
 instance Emitter BinOp where
-  -- Operands are already on stack
+  -- a ?? b
+  -- Operands are already in the stack in the order b, a
+  -- Arithmetic operators
   emit Add = emitInstr IAdd
   emit Sub = emitInstr ISub
   emit Mult = emitInstr IMul
   emit Div = emitInstr IDiv
-  emit _ = error "compiler bug: unimplemented"
+  -- Comparison operators
+  emit Equals = emitCmp Eq
+  emit NotEquals = emitCmp NEq
+  emit LessThan = emitCmp Lt
+  emit LessEqual = emitCmp LEq
+  emit GreaterThan = emitCmp Gt
+  emit GreaterEqual = emitCmp GEq
+  -- Logical operators
+  emit And = emitInstr IAnd
+  emit Or = emitInstr IOr
 
 setLocals :: [Name Type] -> Emit ()
 setLocals ls = do
