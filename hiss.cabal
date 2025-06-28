@@ -71,10 +71,6 @@ library
 executable hissc
   main-is: Main.hs
   other-modules:
-      Command
-      Command.Codegen
-      Command.Eval
-      Command.Repl
       Paths_hiss
   hs-source-dirs:
       app
