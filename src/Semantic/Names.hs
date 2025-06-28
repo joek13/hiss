@@ -1,3 +1,4 @@
+-- Check (semantic) validity of program names.
 module Semantic.Names (collectNames, checkNames, exprCheckNames, declCheckNames, runNameCheck, throwIfShadowsGlobal) where
 
 import Control.Monad (unless, when)
@@ -44,7 +45,6 @@ progGlobals = go . progDecls
     f (Left err) _ = Left err -- propagate error
     f (Right decld) decl
       -- check if this name is already declared
-      -- if so, error
       | name `Set.member` decld = Left $ SemanticError $ "Name error: Global '" <> getIdent name <> "' redeclared at line " <> show line <> ", column " <> show column
       -- if not, insert it
       | otherwise = Right (name `Set.insert` decld)

@@ -1,4 +1,4 @@
-module Syntax (parseProgram, parseExpression, parseDeclaration, parseDeclOrExp, start, stop, getLineCol) where
+module Syntax (parseProgram, parseExpression, parseDeclaration, parseDeclOrExp, start, stop, getLineCol, showPosn) where
 
 import Error (HissError (SyntaxError))
 import Syntax.AST (Decl, Expr, Program)
@@ -16,6 +16,9 @@ stop (Range _ p) = p
 -- | Gets the line and column of an AlexPosn.
 getLineCol :: AlexPosn -> (Int, Int)
 getLineCol (AlexPn _ l c) = (l, c)
+
+showPosn :: AlexPosn -> String
+showPosn (AlexPn _ l c) = "line " <> show l <> ", column " <> show c
 
 -- Wraps Lexer.parseProgram and returns HissError in case of failure
 parseProgram :: String -> Either HissError (Program Range)

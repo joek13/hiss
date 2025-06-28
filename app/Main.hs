@@ -12,6 +12,8 @@ import Codegen (codegen)
 import qualified Data.ByteString as B
 import Codegen.Assembly (writeAssembly)
 import Assembler (assemble)
+import Semantic.Delambdify (delambdify)
+import Syntax.Identifiers (checkIdentifiers)
 
 
 data OutputFormat = Assembly | Bytecode
@@ -53,14 +55,15 @@ compile :: String -> Either HissError Program
 compile source =
   -- Lex/parse program.
   parseProgram source
-      -- Check validity of program identifiers.
-      >>= checkNames
+      -- Check validity of program identifiers/names.
+      >>= checkIdentifiers -- Syntax check
+      >>= checkNames -- Semantic check
       -- Reorder program declarations so values are always declared before they are used.
       >>= reorderDecls
       -- Run type check.
       >>= typecheck
       -- Generate code and strip range information.
-      >>= codegen . fmap snd
+      >>= codegen . delambdify . fmap snd
 
 write :: OutputFormat -> String -> Program -> IO ()
 write Assembly outPath prog = 

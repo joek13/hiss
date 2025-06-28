@@ -34,6 +34,7 @@ library
       Error
       Interpreter.TreeWalker
       Lib
+      Semantic.Delambdify
       Semantic.Dependencies
       Semantic.Entrypoint
       Semantic.Names
@@ -42,6 +43,7 @@ library
       Semantic.Types.Constraints
       Syntax
       Syntax.AST
+      Syntax.Identifiers
       Syntax.Lexer
       Syntax.Parser
   other-modules:
