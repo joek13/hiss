@@ -4,14 +4,6 @@ Read more about Hiss features and design goals on [my personal website](https://
 
 This repository contains the source code for the Hiss compiler `hissc`.
 
-## Progress
-- [x] Parser/lexer
-- [x] Semantic passes
-    - [x] Name checker
-    - [x] Dependency checker
-    - [x] Type checker
-- [x] Codegen
-
 ## Commands
 ```bash
 # build the project
@@ -34,7 +26,7 @@ fib(n) = if n <= 1
          else fib(n-1) + fib(n-2)
 
 main() = fib(13)
-joe@joes-macbook-pro hiss % stack run -- samples/fib.hiss --asm
+% stack run -- samples/fib.hiss --asm
 Successfully compiled samples/fib.hiss
 Wrote assembly to fib.hissa
 % cat fib.hissa
