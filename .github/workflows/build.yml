@@ -1,0 +1,47 @@
+name: Build and test project
+on:
+  push:
+    branches:
+      - 'main'
+
+env:
+  ZIG_VERSION: 0.14.0
+
+jobs:
+  build-hissc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Haskell tooling
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.2.5' # Exact version of ghc to use
+          enable-stack: true
+          stack-version: 'latest'
+      - name: Compile hissc
+        run: cd hissc && stack build
+        # TODO: upload built binary
+    
+  build-hissvm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Download zig
+        run: |
+          cd $HOME
+          curl https://ziglang.org/download/$ZIG_VERSION/zig-linux-x86_64-$ZIG_VERSION.tar.xz --output zig.tar.xz
+          tar xf zig.tar.xz
+          rm zig.tar.xz
+          echo "$HOME/zig-linux-x86_64-$ZIG_VERSION" >> $GITHUB_PATH
+      - name: Validate zig install
+        run: zig version
+      - name: Compile hissvm
+        run: cd hissvm && zig build all
+      - name: Upload built binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: hissvm
+          path: ./hissvm/zig-out/bin/hissvm
+          if-no-files-found: error
