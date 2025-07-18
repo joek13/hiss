@@ -21,7 +21,16 @@ jobs:
           stack-version: 'latest'
       - name: Compile hissc
         run: cd hissc && stack build
-        # TODO: upload built binary
+      - name: Locate hissc executable
+        id: locate-hissc
+        run: cd hissc && echo "hissc-path=$(stack path --local-install-root)/bin/hissc" >> $GITHUB_OUTPUT
+      - name: Upload hissc executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: hissc
+          path: ${{ steps.locate-hissc.outputs.hissc-path }}
+          if-no-files-found: error
+
     
   build-hissvm:
     runs-on: ubuntu-latest
@@ -36,10 +45,18 @@ jobs:
           rm zig.tar.xz
           echo "$HOME/zig-linux-x86_64-$ZIG_VERSION" >> $GITHUB_PATH
       - name: Validate zig install
-        run: zig version
+        run: |
+          actual_version=$(zig version)
+
+          if [ "$actual_version" = "$ZIG_VERSION" ]; then
+              echo "Found expected zig version $ZIG_VERSION"
+          else
+              echo "Expected to find zig version $ZIG_VERSION but found $actual_version"
+              exit 1
+          fi
       - name: Compile hissvm
         run: cd hissvm && zig build all
-      - name: Upload built binary
+      - name: Upload hissvm executable
         uses: actions/upload-artifact@v4
         with:
           name: hissvm
