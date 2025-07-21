@@ -5,11 +5,12 @@
     "playground": "bin/playground.js"
   },
   "scripts": {
-    "lint": "eslint . --ext .ts,.tsx",
-    "lint:fix": "eslint . --ext .ts,.tsx --fix",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "prebuild": "npm run lint && npm run format:check",
+    "lint": "eslint ./lib/ --ext .ts,.tsx",
+    "lint:fix": "eslint ./lib/ --ext .ts,.tsx --fix",
+    "format": "prettier --write ./lib/",
+    "format:check": "prettier --check ./lib/",
+    "bundle": "./bin/generate-bundle.bash",
+    "prebuild": "npm run lint && npm run format:check && npm run bundle",
     "build": "tsc",
     "cdk": "cdk"
   },
