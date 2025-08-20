@@ -21,6 +21,9 @@ export class PlaygroundStack extends cdk.Stack {
 
     playgroundFn.addFunctionUrl({
       authType: FunctionUrlAuthType.NONE, // Public endpoint.
+      cors: {
+        allowedOrigins: ['*'],
+      },
     });
   }
 }
