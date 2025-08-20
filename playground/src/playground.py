@@ -54,7 +54,7 @@ def handle(ev, ctx):
     source = request["source"]
 
     with tempfile.TemporaryDirectory() as tmp_dir:
-        result = {}
+        result = {"stdout": ""}
 
         try:
             write_source(tmp_dir, source)
@@ -79,4 +79,6 @@ def handle(ev, ctx):
 
             return ok(result)
         except Exception as e:
-            return error(result, f"encountered unexpected error: {e}", code=500)
+            err = f"encountered unexpected error: {e}"
+            result["stdout"] += err
+            return error(result, err, code=500)

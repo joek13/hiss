@@ -16,7 +16,7 @@ export class PlaygroundStack extends cdk.Stack {
       runtime: Runtime.PYTHON_3_13,
       handler: 'playground.handle',
       code: Code.fromAsset('./build/bundle.zip'),
-      timeout: Duration.seconds(30),
+      timeout: Duration.seconds(60),
     });
 
     playgroundFn.addFunctionUrl({
