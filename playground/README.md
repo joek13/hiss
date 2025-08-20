@@ -1,14 +1,16 @@
-# Welcome to your CDK TypeScript project
+# hiss playground
 
-This is a blank project for CDK development with TypeScript.
+AWS CDK project. Defines the Lambda backend for the Hiss playground.
 
-The `cdk.json` file tells the CDK Toolkit how to execute your app.
+## Commands
 
-## Useful commands
-
-- `npm run build` compile typescript to js
-- `npm run watch` watch for changes and compile
-- `npm run test` perform the jest unit tests
-- `npx cdk deploy` deploy this stack to your default AWS account/region
-- `npx cdk diff` compare deployed stack with current state
-- `npx cdk synth` emits the synthesized CloudFormation template
+```bash
+# Build project
+$ npm run build
+# Deploy to your AWS account
+$ npm run cdk deploy
+# Fix formatting
+$ npm run format
+# Fix linter errors
+$ npm run lint:fix
+```
